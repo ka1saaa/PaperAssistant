@@ -1,11 +1,18 @@
 """应用配置：从 .env 加载，提供全局 settings 对象。"""
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# 打包成 exe 后：只读资源（模板/静态文件）在 _MEIPASS 临时目录，
+# 可写数据（数据库/uploads/outputs/配置）放 exe 旁边；开发态两者都是项目根。
+if getattr(sys, "frozen", False):
+    APP_DIR = Path(sys._MEIPASS)                       # 只读资源
+    BASE_DIR = Path(sys.executable).resolve().parent   # 可写数据
+else:
+    APP_DIR = BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 

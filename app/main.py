@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.api.routes import router
-from app.config import BASE_DIR
+from app.config import APP_DIR
 from app.core.runtime_config import load as load_cfg
 from app.tasks.manager import manager
 
@@ -20,14 +20,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-STATIC_DIR = BASE_DIR / "app" / "static"
-TEMPLATES_DIR = BASE_DIR / "app" / "templates"
+STATIC_DIR = APP_DIR / "app" / "static"
+TEMPLATES_DIR = APP_DIR / "app" / "templates"
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await manager.startup()
-    logger.info("AutoTranslate ready on http://%s:%s", "127.0.0.1", 8000)
     yield
 
 
