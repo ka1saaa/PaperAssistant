@@ -18,12 +18,39 @@ const md = (text) => {
   return marked.parse(s);
 };
 
+let authLocked = false;
+
 async function api(path, options) {
   const resp = await fetch(path, options);
+  if (resp.status === 401 && !path.startsWith("/api/auth")) {
+    if (!authLocked) { authLocked = true; $("#auth-mask").classList.remove("hidden"); }
+    throw new Error("需要访问密码");
+  }
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) throw new Error(data.detail || `请求失败 (${resp.status})`);
   return data;
 }
+
+async function unlockAccess() {
+  const pwd = $("#auth-password").value;
+  if (!pwd) return;
+  try {
+    await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pwd }),
+    }).then((r) => { if (!r.ok) throw new Error("密码错误"); });
+    authLocked = false;
+    $("#auth-mask").classList.add("hidden");
+    $("#auth-error").textContent = "";
+    $("#auth-password").value = "";
+    loadConfig(); refreshTasks(); refreshGlossaryCount();
+  } catch (e) {
+    $("#auth-error").textContent = "密码错误，请重试";
+  }
+}
+$("#auth-submit").addEventListener("click", unlockAccess);
+$("#auth-password").addEventListener("keydown", (e) => { if (e.key === "Enter") unlockAccess(); });
 
 /* ---------- toast ---------- */
 function toast(msg, type = "info") {
@@ -81,6 +108,30 @@ async function loadConfig() {
     $("#engine-chip").classList.add("off");
   }
 }
+
+/* ---------- 深色模式 ---------- */
+const THEME_KEY = "at-theme";
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const btn = $("#theme-btn");
+  btn.innerHTML = theme === "dark"
+    ? '<i class="fa-solid fa-sun"></i><span>浅色模式</span>'
+    : '<i class="fa-solid fa-moon"></i><span>深色模式</span>';
+}
+(function initTheme() {
+  let theme = null;
+  try { theme = localStorage.getItem(THEME_KEY); } catch { /* 隐私模式 */ }
+  if (!theme) {
+    theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark" : "light";
+  }
+  applyTheme(theme);
+})();
+$("#theme-btn").addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* 隐私模式 */ }
+});
 
 /* ---------- 模型设置弹窗 ---------- */
 const CUSTOM_OPT = "__custom__";
@@ -161,6 +212,8 @@ async function openSettings() {
     $("#cfg-baseurl").value = cfg.base_url || "";
     $("#cfg-qps").value = cfg.qps || 4;
     $("#cfg-langout").value = cfg.lang_out || "zh";
+    $("#cfg-password").placeholder = cfg.access_password_set
+      ? "已开启（不修改请留空，输入 none 可关闭）" : "未开启，输入即启用";
     prov.value = guessProvider(cfg.base_url);
     fillModelOptions(PROVIDERS[prov.value]?.models || [], cfg.model);
     showModelSelect();
@@ -240,6 +293,7 @@ $("#test-model-btn").addEventListener("click", async () => {
 });
 
 $("#save-cfg-btn").addEventListener("click", async () => {
+  const newPwd = $("#cfg-password").value.trim();
   const body = {
     service: currentService,
     base_url: $("#cfg-baseurl").value.trim(),
@@ -248,6 +302,8 @@ $("#save-cfg-btn").addEventListener("click", async () => {
     qps: parseInt($("#cfg-qps").value, 10) || 4,
     lang_out: $("#cfg-langout").value,
     enable_dual: $("#dual-checkbox").checked,
+    access_password: newPwd === "" ? null
+      : (newPwd.toLowerCase() === "none" ? "" : newPwd),  // none=关闭；null=保留
   };
   try {
     const r = await api("/api/config", {
@@ -255,6 +311,14 @@ $("#save-cfg-btn").addEventListener("click", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    if (newPwd !== "" && newPwd.toLowerCase() !== "none") {
+      // 设置了新密码：立刻换取 cookie，避免本页下次请求被锁
+      await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPwd }),
+      });
+    }
     toast(r.ready ? "设置已保存，即时生效" : `已保存（${r.detail}）`, r.ready ? "ok" : "info");
     if (r.ready) $("#settings-modal").classList.add("hidden");
     $("#warn-banner").classList.add("hidden");
@@ -627,7 +691,80 @@ function escapeHtml(s) {
 bindDropzone();
 loadConfig();
 refreshTasks();
+refreshGlossaryCount();
 setInterval(refreshTasks, 3000);
+
+/* ---------- 术语表 ---------- */
+async function refreshGlossaryCount() {
+  try {
+    const d = await api("/api/glossary");
+    const n = d.entries.length;
+    const em = $("#glossary-count");
+    em.textContent = n;
+    em.classList.toggle("hidden", n === 0);
+  } catch { /* 忽略 */ }
+}
+
+function renderGlossaryCurrent(entries) {
+  $("#glossary-cur-count").textContent = entries.length;
+  $("#glossary-current-list").innerHTML = entries.length
+    ? entries.map((e) =>
+      `<li><code>${escapeHtml(e.src)}</code><i class="fa-solid fa-arrow-right"></i><b>${escapeHtml(e.tgt)}</b></li>`).join("")
+    : '<li class="muted small">暂无术语</li>';
+}
+
+async function openGlossary() {
+  $("#glossary-modal").classList.remove("hidden");
+  $("#glossary-input").value = "";
+  $("#glossary-status").textContent = "";
+  try {
+    const d = await api("/api/glossary");
+    renderGlossaryCurrent(d.entries);
+  } catch (e) {
+    $("#glossary-status").textContent = "读取失败：" + e.message;
+  }
+}
+
+$("#glossary-btn").addEventListener("click", openGlossary);
+$("#glossary-close").addEventListener("click", () => $("#glossary-modal").classList.add("hidden"));
+$("#glossary-modal .modal-mask").addEventListener("click", () => $("#glossary-modal").classList.add("hidden"));
+
+$("#glossary-save-btn").addEventListener("click", async () => {
+  // 解析 textarea：每行 "src,tgt"，中英文逗号都支持
+  const entries = $("#glossary-input").value.split("\n").map((line) => {
+    const idx = line.replace("，", ",").indexOf(",");
+    if (idx <= 0) return null;
+    return { src: line.slice(0, idx).trim(), tgt: line.slice(idx + 1).replace("，", "").trim() };
+  }).filter(Boolean);
+  // 与已有术语合并（新增优先）
+  let existing = [];
+  try { existing = (await api("/api/glossary")).entries; } catch { /* 空 */ }
+  const merged = [...entries, ...existing];
+  try {
+    const r = await api("/api/glossary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries: merged }),
+    });
+    $("#glossary-input").value = "";
+    $("#glossary-status").textContent = `已保存，共 ${r.count} 条术语`;
+    renderGlossaryCurrent((await api("/api/glossary")).entries);
+    refreshGlossaryCount();
+    toast(`术语表已保存（${r.count} 条）`, "ok");
+  } catch (e) {
+    $("#glossary-status").textContent = "保存失败：" + e.message;
+  }
+});
+
+$("#glossary-clear-btn").addEventListener("click", async () => {
+  if (!confirm("清空全部术语？")) return;
+  try {
+    await api("/api/glossary", { method: "DELETE" });
+    renderGlossaryCurrent([]);
+    refreshGlossaryCount();
+    $("#glossary-status").textContent = "已清空";
+  } catch (e) { toast("清空失败：" + e.message, "err"); }
+});
 
 /* ================= PDF 阅读器 ================= */
 if (typeof pdfjsLib !== "undefined") {
@@ -636,7 +773,9 @@ if (typeof pdfjsLib !== "undefined") {
 }
 
 const V = { task: null, kinds: {}, kind: "source", doc: null, page: 1, scale: 1.0,
-            rendering: false, renderSeq: 0, loadSeq: 0 };
+            renderSeq: 0, loadSeq: 0,
+            observer: new IntersectionObserver(onSlotIntersect, { root: null, rootMargin: "600px 0px" }),
+            slotW: 0, slotH: 0 };
 const KIND_NAMES = { source: "原文", mono: "译文", dual: "双语对照" };
 
 function switchSide(name) {
@@ -659,6 +798,34 @@ async function openViewer(taskId, kindsStr) {
   switchSide("annots");
   await loadAnnotations();
   await loadDoc();
+  loadToc();
+}
+
+/* ---------- 目录 ---------- */
+async function loadToc() {
+  $("#toc-loading").style.display = "flex";
+  $("#toc-list").innerHTML = "";
+  $("#toc-empty").classList.add("hidden");
+  try {
+    const d = await api(`/api/tasks/${V.task.id}/outline/${V.kind}`);
+    const toc = d.outline || [];
+    $("#toc-loading").style.display = "none";
+    if (!toc.length) {
+      $("#toc-empty").classList.remove("hidden");
+      return;
+    }
+    $("#toc-list").innerHTML = toc.map(([lv, title, pg]) =>
+      `<li><button class="toc-item lv${Math.min(lv, 3)}" data-pg="${pg}"
+         title="${escapeHtml(title)}">${escapeHtml(title)}</button></li>`).join("");
+    $("#toc-list").querySelectorAll(".toc-item").forEach((b) =>
+      b.addEventListener("click", () => {
+        switchSide("annots");
+        gotoPage(parseInt(b.dataset.pg, 10));
+      }));
+  } catch {
+    $("#toc-loading").style.display = "none";
+    $("#toc-empty").classList.remove("hidden");
+  }
 }
 
 function buildKindPills() {
@@ -671,32 +838,18 @@ function buildKindPills() {
       V.kind = b.dataset.vkind; V.page = 1;
       buildKindPills();
       await loadDoc();
+      loadToc();
     }));
 }
 
 async function loadDoc() {
   const load = ++V.loadSeq;
-  // 等待进行中的渲染自然结束（绝不 cancel：取消渲染会毒死 pdf.js worker，
-  // 导致本次会话所有后续渲染永久挂起）。单页渲染 <1s，等待成本可忽略。
-  while (V.rendering) {
-    await new Promise((r) => setTimeout(r, 30));
-    if (load !== V.loadSeq) return;
-  }
-
   // 文档按 kind 缓存，切换即秒开；首次加载走网络
   V.doc = null;
   const cacheKey = `${V.task.id}:${V.kind}`;
   V.docs ||= {};
   let doc = V.docs[cacheKey];
   if (!doc) {
-    // 换全新画布元素，避开 pdf.js 的画布复用锁
-    const wrap = $("#viewer-page-wrap");
-    const freshCanvas = document.createElement("canvas");
-    freshCanvas.id = "viewer-canvas";
-    const freshLayer = document.createElement("div");
-    freshLayer.id = "viewer-textlayer";
-    freshLayer.className = "textLayer";
-    wrap.replaceChildren(freshCanvas, freshLayer);
     $("#viewer-loading").classList.remove("hidden");
     $("#viewer-page-wrap").classList.add("hidden");
     try {
@@ -718,94 +871,116 @@ async function loadDoc() {
     $("#viewer-loading").classList.add("hidden");
   }
   V.doc = doc;
-  V.page = Math.min(Math.max(1, V.page), V.doc.numPages);
-  $("#pg-total").textContent = V.doc.numPages;
+  V.page = Math.min(Math.max(1, V.page), doc.numPages);
+  $("#pg-total").textContent = doc.numPages;
   $("#viewer-page-wrap").classList.remove("hidden");
-  await renderPage();
+  await buildSlots();
 }
 
-async function renderPage() {
-  if (!V.doc) return;
+/* ---------- 连续滚动：页槽 + 懒加载 ---------- */
+async function buildSlots() {
   const seq = ++V.renderSeq;
-  // 串行化：等上一次渲染自然完成
-  while (V.rendering) {
-    await new Promise((r) => setTimeout(r, 30));
-    if (seq !== V.renderSeq) return;
-  }
-  if (seq !== V.renderSeq || !V.doc) return;   // 已被新请求取代
-  V.rendering = true;
-  try {
-    // 视觉层：服务端渲染的 PNG（任何浏览器都可靠）
-    const page = await V.doc.getPage(V.page);
-    if (seq !== V.renderSeq || !V.doc) return;
-    const vp = page.getViewport({ scale: V.scale });
-    const wrap = $("#viewer-page-wrap");
-    const img = document.createElement("img");
-    img.id = "viewer-canvas";
-    img.alt = "";
-    img.style.width = Math.floor(vp.width) + "px";
-    img.style.height = Math.floor(vp.height) + "px";
-    img.style.display = "block";
-    const layer = document.createElement("div");
-    layer.id = "viewer-textlayer";
-    layer.className = "textLayer";
-    const old = document.getElementById("viewer-canvas");
-    const oldLayer = document.getElementById("viewer-textlayer");
-    if (old) old.replaceWith(img); else wrap.prepend(img);
-    if (oldLayer) oldLayer.replaceWith(layer); else wrap.appendChild(layer);
-    img.src = `/api/tasks/${V.task.id}/page/${V.kind}/${V.page}?zoom=${V.scale}`;
+  // 取第一页尺寸作为所有页槽的基准
+  const p1 = await V.doc.getPage(1);
+  if (seq !== V.renderSeq || !V.doc) return;
+  const vp1 = p1.getViewport({ scale: V.scale });
+  V.slotW = Math.floor(vp1.width);
+  V.slotH = Math.floor(vp1.height);
 
-    // 文字层：pdf.js getTextContent（主线程 DOM 操作，实测可靠）
-    await renderTextLayer(page, vp);
-  } catch (e) {
-    toast("页面渲染失败：" + (e.message || e), "err");
-  } finally {
-    V.rendering = false;
-    if (seq === V.renderSeq) {
-      $("#pg-input").value = V.page;
-      $("#zoom-ind").textContent = Math.round(V.scale * 100) + "%";
-    }
+  const wrap = $("#viewer-page-wrap");
+  wrap.innerHTML = "";
+  for (let n = 1; n <= V.doc.numPages; n++) {
+    const slot = document.createElement("div");
+    slot.className = "page-slot";
+    slot.dataset.page = n;
+    slot.dataset.loaded = "";
+    slot.style.width = V.slotW + "px";
+    slot.style.height = V.slotH + "px";
+    slot.innerHTML = `<span class="slot-num">${n}</span><div class="textLayer"></div>`;
+    wrap.appendChild(slot);
+    V.observer.observe(slot);
+  }
+  $("#zoom-ind").textContent = Math.round(V.scale * 100) + "%";
+  gotoPage(V.page, false);
+}
+
+function onSlotIntersect(entries) {
+  for (const en of entries) {
+    if (en.isIntersecting) loadSlot(en.target);
   }
 }
 
-async function renderTextLayer(page, vp) {
-  const layer = $("#viewer-textlayer");
-  layer.innerHTML = "";
-  const tc = await page.getTextContent();
-  for (const it of tc.items) {
-    if (!it.str) continue;
-    const tx = pdfjsLib.Util.transform(vp.transform, it.transform);
-    const fh = Math.hypot(tx[2], tx[3]);
-    const angle = Math.atan2(tx[1], tx[0]);
-    const span = document.createElement("span");
-    span.textContent = it.str;
-    span.style.left = tx[4] + "px";
-    span.style.top = (tx[5] - fh) + "px";
-    span.style.fontSize = fh + "px";
-    if (angle) span.style.transform = `rotate(${angle}rad)`;
-    layer.appendChild(span);
+async function loadSlot(slot) {
+  if (slot.dataset.loaded === "1") return;
+  slot.dataset.loaded = "1";
+  const n = parseInt(slot.dataset.page, 10);
+  const img = document.createElement("img");
+  img.alt = "";
+  img.style.width = "100%";
+  img.style.height = "100%";
+  img.style.display = "block";
+  img.src = `/api/tasks/${V.task.id}/page/${V.kind}/${n}?zoom=${V.scale}`;
+  slot.prepend(img);
+
+  // 文字层（选中/批注/解释依赖它）
+  try {
+    const page = await V.doc.getPage(n);
+    const vp = page.getViewport({ scale: V.scale });
+    const layer = slot.querySelector(".textLayer");
+    const tc = await page.getTextContent();
+    for (const it of tc.items) {
+      if (!it.str) continue;
+      const tx = pdfjsLib.Util.transform(vp.transform, it.transform);
+      const fh = Math.hypot(tx[2], tx[3]);
+      const angle = Math.atan2(tx[1], tx[0]);
+      const span = document.createElement("span");
+      span.textContent = it.str;
+      span.style.left = tx[4] + "px";
+      span.style.top = (tx[5] - fh) + "px";
+      span.style.fontSize = fh + "px";
+      if (angle) span.style.transform = `rotate(${angle}rad)`;
+      layer.appendChild(span);
+    }
+  } catch { /* 文字层失败不影响图片显示 */ }
+}
+
+function updatePageIndicator() {
+  const slots = $("#viewer-page-wrap").children;
+  if (!slots.length) return;
+  const mid = $("#viewer-scroll").scrollTop + $("#viewer-scroll").clientHeight / 3;
+  let cur = 1;
+  for (const s of slots) {
+    if (s.offsetTop <= mid) cur = parseInt(s.dataset.page, 10);
+    else break;
   }
+  V.page = cur;
+  $("#pg-input").value = cur;
 }
 
 /* 翻页 / 缩放 */
-async function gotoPage(p) {
+function gotoPage(p, smooth = true) {
   if (!V.doc) return;
   p = Math.min(Math.max(1, p), V.doc.numPages);
-  if (p === V.page) return;
   V.page = p;
-  await renderPage();
+  $("#pg-input").value = p;
+  const slot = $("#viewer-page-wrap").children[p - 1];
+  if (slot) {
+    loadSlot(slot);   // 立即加载目标页
+    slot.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+  }
 }
 $("#pg-prev").addEventListener("click", () => gotoPage(V.page - 1));
 $("#pg-next").addEventListener("click", () => gotoPage(V.page + 1));
 $("#pg-input").addEventListener("change", (e) => gotoPage(parseInt(e.target.value, 10) || 1));
-$("#zoom-in").addEventListener("click", () => { V.scale = Math.min(4, V.scale * 1.25); renderPage(); });
-$("#zoom-out").addEventListener("click", () => { V.scale = Math.max(0.5, V.scale / 1.25); renderPage(); });
+$("#zoom-in").addEventListener("click", () => { V.scale = Math.min(4, V.scale * 1.25); buildSlots(); });
+$("#zoom-out").addEventListener("click", () => { V.scale = Math.max(0.5, V.scale / 1.25); buildSlots(); });
+$("#viewer-scroll").addEventListener("scroll", () => updatePageIndicator(), { passive: true });
 $("#viewer-close").addEventListener("click", closeViewer);
 function closeViewer() {
   $("#viewer-modal").classList.add("hidden");
   $("#sel-popup").classList.add("hidden");
+  if (V.observer) V.observer.disconnect();
   // 只放下引用：不 cancel 渲染、不 destroy 文档（两者都会毒死 pdf.js worker）。
-  // 渲染循环会自然结束；seq 检查保证不会有旧内容写回新视图。
   V.doc = null;
   V.docs = {};
 }
@@ -822,7 +997,7 @@ $("#viewer-scroll").addEventListener("mouseup", (e) => {
     const sel = window.getSelection();
     const text = sel ? sel.toString().trim() : "";
     const inLayer = sel && sel.anchorNode &&
-      !!sel.anchorNode.parentElement?.closest?.("#viewer-textlayer");
+      !!sel.anchorNode.parentElement?.closest?.(".textLayer");
     if (text && inLayer && text.length <= 300) {
       showSelPopup(text);
     } else {
@@ -886,6 +1061,9 @@ async function loadAnnotations() {
     const list = d.annotations || [];
     $("#annot-count").textContent = list.length;
     $("#annot-empty").style.display = list.length ? "none" : "flex";
+    const exp = $("#export-annots-btn");
+    exp.classList.toggle("disabled", list.length === 0);
+    exp.href = `/api/tasks/${V.task.id}/annotations/export`;
     $("#annot-list").innerHTML = list.map((a) => `
       <li class="annot-item" data-aid="${a.id}">
         <div class="annot-item-head">

@@ -1,14 +1,18 @@
 """REST API：搜索、任务创建/进度/下载/取消/删除/历史、AI 概括与术语解释、模型设置。"""
 import json
 import logging
+import re
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from app.config import UPLOAD_DIR
 from app.core import summarizer
+from app.core.glossary import load_entries as load_glossary_entries
+from app.core.glossary import save_entries as save_glossary_entries
 from app.core.llm import LLMError, chat_with
 from app.core.runtime_config import is_custom_ready, load as load_cfg, save as save_cfg
 from app.core.search import search_papers
@@ -42,8 +46,30 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-@router.get("/config")
-async def config() -> dict:
+class AuthBody(BaseModel):
+    password: str
+
+
+def app_auth(password: str):
+    """校验访问密码并种下鉴权 cookie（/api/auth 与保存配置后复用）。"""
+    import hashlib
+
+    cfg = load_cfg()
+    if password and password == cfg.get("access_password"):
+        resp = JSONResponse({"ok": True})
+        token = hashlib.sha256(password.encode()).hexdigest()
+        resp.set_cookie("at_auth", token, max_age=30 * 24 * 3600,
+                        httponly=True, samesite="lax")
+        return resp
+    return JSONResponse({"detail": "密码错误"}, status_code=401)
+
+
+@router.post("/auth")
+async def auth(body: AuthBody):
+    return app_auth(body.password)
+
+
+def _config_state() -> dict:
     cfg = load_cfg()
     return {
         "service": cfg["service"],
@@ -56,7 +82,13 @@ async def config() -> dict:
         "lang_in": cfg["lang_in"],
         "lang_out": cfg["lang_out"],
         "enable_dual": cfg["enable_dual"],
+        "access_password_set": bool(cfg.get("access_password")),
     }
+
+
+@router.get("/config")
+async def config() -> dict:
+    return _config_state()
 
 
 # ---- 模型设置 ----
@@ -70,6 +102,7 @@ class ConfigBody(BaseModel):
     lang_in: str | None = None
     lang_out: str | None = None
     enable_dual: bool | None = None
+    access_password: str | None = None   # 空串 = 关闭密码；None = 保留原值
 
 
 @router.post("/config")
@@ -279,6 +312,29 @@ async def delete_task(task_id: str) -> dict:
     return {"ok": True}
 
 
+# ---- 术语表 ----
+
+class GlossaryBody(BaseModel):
+    entries: list[dict]          # [{src, tgt}, ...]
+
+
+@router.get("/glossary")
+async def get_glossary() -> dict:
+    return {"entries": load_glossary_entries()}
+
+
+@router.post("/glossary")
+async def save_glossary(body: GlossaryBody) -> dict:
+    count = save_glossary_entries(body.entries)
+    return {"count": count}
+
+
+@router.delete("/glossary")
+async def clear_glossary() -> dict:
+    save_glossary_entries([])
+    return {"count": 0}
+
+
 # ---- 批注 ----
 
 class AnnotBody(BaseModel):
@@ -343,6 +399,80 @@ async def task_page_png(task_id: str, kind: str, page_no: int, zoom: float = 1.0
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"页面渲染失败：{exc}")
     return Response(content=png, media_type="image/png")
+
+
+@router.get("/tasks/{task_id}/annotations/export")
+async def export_annotations(task_id: str):
+    """把批注导出为结构化 Markdown 学习笔记。"""
+    from datetime import datetime, timezone
+
+    from fastapi.responses import Response
+
+    task = manager.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    annots = _read_annots(task_id)
+    if not annots:
+        raise HTTPException(status_code=404, detail="该任务还没有批注")
+
+    kind_names = {"source": "原文", "mono": "译文", "dual": "双语对照"}
+    lines = [
+        f"# 批注笔记：{task.title}",
+        "",
+        f"> 导出于 {datetime.now(timezone.utc).isoformat(timespec='seconds')[:16].replace('T', ' ')}"
+        f" · 共 {len(annots)} 条批注 · 由论文助手 PaperAssistant 生成",
+    ]
+    for kind in ("source", "mono", "dual"):
+        group = sorted((a for a in annots if a["kind"] == kind), key=lambda a: a["page"])
+        if not group:
+            continue
+        lines += ["", f"## {kind_names[kind]}"]
+        cur_page = None
+        for a in group:
+            if a["page"] != cur_page:
+                cur_page = a["page"]
+                lines += ["", f"### 第 {cur_page} 页"]
+            lines += [
+                "",
+                f"> {a['quote']}",
+                "",
+                a["note"],
+            ]
+    md = "\n".join(lines) + "\n"
+
+    safe = re.sub(r'[\\/:*?"<>|\s]+', "_", task.title)[:50].strip("_") or "paper"
+    return Response(
+        content=md,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(f'{safe}-批注笔记.md')}"},
+    )
+
+
+@router.get("/tasks/{task_id}/outline/{kind}")
+async def task_outline(task_id: str, kind: str):
+    """返回 PDF 书签目录：[[级别, 标题, 页码], ...]（无书签时为空数组）。"""
+    from app.config import OUTPUT_DIR
+    import fitz
+
+    task = manager.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if kind not in ("source", "mono", "dual"):
+        raise HTTPException(status_code=400, detail="文档类型无效")
+    if kind == "source":
+        path = task.source_pdf()
+    else:
+        pattern = "*.mono.pdf" if kind == "mono" else "*.dual.pdf"
+        path = next(iter((OUTPUT_DIR / task_id).glob(pattern)), None)
+    if not path or not path.exists():
+        raise HTTPException(status_code=404, detail=f"{kind} 文档不存在")
+    try:
+        doc = fitz.open(path)
+        toc = [[int(lv), str(title), int(pg)] for lv, title, pg in doc.get_toc() if pg >= 1]
+        doc.close()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"目录读取失败：{exc}")
+    return {"outline": toc}
 
 
 @router.get("/tasks/{task_id}/annotations")

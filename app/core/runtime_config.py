@@ -4,6 +4,7 @@
 使界面修改即时生效（新任务使用新配置，无需重启）。
 """
 import json
+import os
 import threading
 from pathlib import Path
 
@@ -13,7 +14,7 @@ CONFIG_PATH = BASE_DIR / "model_config.json"
 _LOCK = threading.Lock()
 
 _FIELDS = ("service", "base_url", "api_key", "model", "qps",
-           "lang_in", "lang_out", "enable_dual")
+           "lang_in", "lang_out", "enable_dual", "access_password")
 
 
 def _defaults() -> dict:
@@ -26,6 +27,7 @@ def _defaults() -> dict:
         "lang_in": settings.lang_in,
         "lang_out": settings.lang_out,
         "enable_dual": settings.enable_dual,
+        "access_password": os.getenv("ACCESS_PASSWORD", ""),
     }
 
 

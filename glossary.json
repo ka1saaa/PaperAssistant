@@ -1,0 +1,10 @@
+[
+  {
+    "src": "Transformer",
+    "tgt": "Transformer"
+  },
+  {
+    "src": "self-attention",
+    "tgt": "自注意力"
+  }
+]

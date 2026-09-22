@@ -74,7 +74,8 @@ def _find_exe() -> str:
 
 def _build_cmd(pdf_path: Path, out_dir: Path, *, service: str, lang_in: str, lang_out: str,
                dual: bool, qps: int, api_key: str, base_url: str, model: str,
-               pages: str | None = None, no_watermark: bool = True) -> list[str]:
+               pages: str | None = None, no_watermark: bool = True,
+               glossary_csv: Path | None = None) -> list[str]:
     cmd = [
         _find_exe(),
         str(pdf_path),
@@ -84,6 +85,8 @@ def _build_cmd(pdf_path: Path, out_dir: Path, *, service: str, lang_in: str, lan
         "--watermark-output-mode", "no_watermark" if no_watermark else "watermarked",
         "--disable-config-auto-save",
     ]
+    if glossary_csv:
+        cmd += ["--glossaries", str(glossary_csv)]
     if service == "siliconflowfree":
         cmd.append("--siliconflowfree")
     else:
@@ -111,6 +114,7 @@ async def translate_pdf(
     base_url: str = "",
     model: str = "",
     pages: str | None = None,
+    glossary_csv: Path | None = None,
     timeout: float = DEFAULT_TIMEOUT,
     on_progress: Callable[[str, float | None], Awaitable[None]] | None = None,
 ) -> TranslateResult:
@@ -122,7 +126,7 @@ async def translate_pdf(
     out_dir.mkdir(parents=True, exist_ok=True)
     cmd = _build_cmd(pdf_path, out_dir, service=service, lang_in=lang_in, lang_out=lang_out,
                      dual=dual, qps=qps, api_key=api_key, base_url=base_url, model=model,
-                     pages=pages)
+                     pages=pages, glossary_csv=glossary_csv)
     logger.info("pdf2zh cmd: %s", " ".join(cmd[:2]) + " ...")
 
     state = _RunState()

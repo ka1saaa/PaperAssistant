@@ -10,6 +10,7 @@ from pathlib import Path
 
 from app.config import OUTPUT_DIR, UPLOAD_DIR
 from app.core import pdf2zh_runner
+from app.core.glossary import load_entries as load_glossary, write_csv as write_glossary_csv
 from app.core.runtime_config import load as load_cfg
 from app.core.search import downloader
 from app.storage import db
@@ -195,6 +196,12 @@ class TaskManager:
                 await db.update_task(task.id, stage=stage, progress=percent)
 
             cfg = load_cfg()
+            # 用户术语表：有则生成 CSV 传给 pdf2zh
+            glossary_csv = None
+            if load_glossary():
+                glossary_csv = OUTPUT_DIR / task.id / "glossary.csv"
+                write_glossary_csv(glossary_csv)
+
             async with self._tr_sem:
                 result = await pdf2zh_runner.translate_pdf(
                     task.pdf_path,
@@ -207,6 +214,7 @@ class TaskManager:
                     api_key=cfg["api_key"],
                     base_url=cfg["base_url"],
                     model=cfg["model"],
+                    glossary_csv=glossary_csv,
                     on_progress=on_progress,
                 )
 

@@ -6,7 +6,7 @@
 <title>AutoTranslate · 论文自动翻译</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
-<link rel="stylesheet" href="/static/style.css?v=7">
+<link rel="stylesheet" href="/static/style.css?v=10">
 </head>
 <body>
 <div class="layout">
@@ -35,6 +35,9 @@
 
     <div class="sidebar-foot">
       <div id="engine-chip" class="engine-chip" title="点击配置模型"><span class="dot"></span>检查配置中…</div>
+      <button id="theme-btn" class="theme-btn" title="切换深色/浅色模式">
+        <i class="fa-solid fa-moon"></i><span>深色模式</span>
+      </button>
       <div class="foot-note">pdf2zh + BabelDOC 驱动<br>保留原版排版与公式图表</div>
     </div>
   </aside>
@@ -92,6 +95,11 @@
         <input id="dual-checkbox" type="checkbox" checked>
         <span>同时生成双语对照版 PDF</span>
       </label>
+      <button id="glossary-btn" class="dual-toggle glossary-toggle" type="button"
+        title="固定专业术语的译法，翻译时全文一致">
+        <i class="fa-solid fa-book"></i><span>术语表</span>
+        <em id="glossary-count" class="glossary-count hidden">0</em>
+      </button>
     </section>
 
     <!-- 视图：任务 -->
@@ -191,6 +199,12 @@
         </div>
       </div>
 
+      <div class="form-row">
+        <label>访问密码</label>
+        <input id="cfg-password" class="field" type="password" placeholder="未开启，输入即启用">
+        <p class="muted small" style="margin-top:5px">开启后局域网访问需输入密码；输入 none 关闭；留空保留原值</p>
+      </div>
+
       <div class="form-row two-col">
         <div>
           <label>翻译频率（QPS）</label>
@@ -239,17 +253,19 @@
   <div class="viewer-main">
     <div class="viewer-scroll" id="viewer-scroll">
       <div class="viewer-loading" id="viewer-loading"><span class="spin big"></span><p>正在加载 PDF…</p></div>
-      <div id="viewer-page-wrap" class="hidden">
-        <canvas id="viewer-canvas"></canvas>
-        <div id="viewer-textlayer" class="textLayer"></div>
-      </div>
+      <div id="viewer-page-wrap" class="hidden"></div>
     </div>
     <aside class="viewer-side">
       <div class="side-tabs">
         <button class="side-tab active" data-side="annots"><i class="fa-solid fa-highlighter"></i> 批注 <em id="annot-count">0</em></button>
         <button class="side-tab" data-side="explain"><i class="fa-solid fa-wand-magic-sparkles"></i> AI 解释</button>
+        <button class="side-tab" data-side="toc"><i class="fa-solid fa-list-ul"></i> 目录</button>
       </div>
       <div id="side-annots" class="side-pane active">
+        <div class="annot-toolbar">
+          <a id="export-annots-btn" class="btn ghost small disabled" title="把全部批注导出为 Markdown 笔记">
+            <i class="fa-solid fa-file-export"></i> 导出笔记</a>
+        </div>
         <div id="annot-editor" class="annot-editor hidden">
           <div class="annot-quote" id="annot-quote"></div>
           <textarea id="annot-note" placeholder="写下你的笔记…"></textarea>
@@ -269,6 +285,14 @@
           <p class="muted small pad">在 PDF 中选中不懂的术语或句子，点「解释」，AI 会结合论文给出说明</p>
         </div>
       </div>
+      <div id="side-toc" class="side-pane">
+        <div id="toc-loading" class="kw-loading"><span class="spin"></span> 读取目录…</div>
+        <ul id="toc-list" class="toc-list"></ul>
+        <div id="toc-empty" class="empty-state small-pad hidden">
+          <i class="fa-solid fa-book-bookmark"></i>
+          <p class="muted small">该文档没有内置书签目录<br>试试切换到「原文」查看</p>
+        </div>
+      </div>
     </aside>
   </div>
   <div id="sel-popup" class="sel-popup hidden">
@@ -277,8 +301,51 @@
   </div>
 </div>
 
+<!-- ===== 术语表弹窗 ===== -->
+<div id="glossary-modal" class="modal hidden">
+  <div class="modal-mask"></div>
+  <div class="modal-card settings-card">
+    <button class="modal-close" id="glossary-close"><i class="fa-solid fa-xmark"></i></button>
+    <div class="modal-head">
+      <div class="modal-icon gear"><i class="fa-solid fa-book"></i></div>
+      <div>
+        <div class="modal-title">术语表</div>
+        <div class="modal-sub">固定术语译法，翻译时全文一致（对所有新任务生效）</div>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>添加术语（每行一条：英文,中文）</label>
+        <textarea id="glossary-input" class="field" rows="5"
+          placeholder="Transformer,Transformer&#10;LLM,大语言模型"></textarea>
+      </div>
+      <div id="glossary-status" class="small muted"></div>
+      <div class="settings-actions">
+        <button id="glossary-clear-btn" class="btn ghost danger-small"><i class="fa-solid fa-trash-can"></i> 清空</button>
+        <button id="glossary-save-btn" class="btn primary"><i class="fa-solid fa-floppy-disk"></i> 保存术语表</button>
+      </div>
+      <div class="glossary-current">
+        <label>当前术语（<b id="glossary-cur-count">0</b> 条）</label>
+        <ul id="glossary-current-list" class="glossary-current-list"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 访问密码遮罩 ===== -->
+<div id="auth-mask" class="auth-mask hidden">
+  <div class="auth-card">
+    <div class="modal-icon"><i class="fa-solid fa-lock"></i></div>
+    <div class="auth-title">本服务已开启访问密码</div>
+    <input id="auth-password" class="field" type="password" placeholder="请输入访问密码">
+    <div id="auth-error" class="small" style="color:var(--err)"></div>
+    <button id="auth-submit" class="btn primary" style="width:100%">
+      <i class="fa-solid fa-unlock"></i> 解锁访问</button>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
-<script src="/static/app.js?v=15"></script>
+<script src="/static/app.js?v=18"></script>
 </body>
 </html>
