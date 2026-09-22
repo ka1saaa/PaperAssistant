@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# 用户私有数据（含 API Key，严禁提交）
+.env
+model_config.json
+
+# 运行数据
+autotranslate.db
+uploads/
+outputs/
+testdata/
+*.log
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ZCode 会话文件
+.zcode/

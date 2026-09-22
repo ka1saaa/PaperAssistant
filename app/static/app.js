@@ -1,0 +1,954 @@
+/* AutoTranslate 前端：搜索/上传/任务轮询/AI 概括弹窗/视图切换。 */
+"use strict";
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => [...document.querySelectorAll(sel)];
+let searchResults = [];
+let currentSummary = null;   // 弹窗当前数据
+let currentTaskTitle = "";
+
+if (typeof marked !== "undefined") {
+  marked.setOptions({ breaks: true, gfm: true });
+}
+const md = (text) => {
+  const s = String(text ?? "");
+  if (typeof marked === "undefined") {
+    return "<p>" + escapeHtml(s).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br>") + "</p>";
+  }
+  return marked.parse(s);
+};
+
+async function api(path, options) {
+  const resp = await fetch(path, options);
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.detail || `请求失败 (${resp.status})`);
+  return data;
+}
+
+/* ---------- toast ---------- */
+function toast(msg, type = "info") {
+  const icons = { ok: "fa-circle-check", err: "fa-circle-xmark", info: "fa-circle-info" };
+  const el = document.createElement("div");
+  el.className = `toast toast-${type}`;
+  el.innerHTML = `<i class="fa-solid ${icons[type] || icons.info}"></i><span>${escapeHtml(msg)}</span>`;
+  $("#toast-box").appendChild(el);
+  setTimeout(() => el.classList.add("show"), 20);
+  setTimeout(() => { el.classList.remove("show"); setTimeout(() => el.remove(), 350); }, 4200);
+}
+
+/* ---------- 视图切换 ---------- */
+$$(".nav-item").forEach((btn) => btn.addEventListener("click", () => {
+  $$(".nav-item").forEach((b) => b.classList.toggle("active", b === btn));
+  $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${btn.dataset.view}`));
+}));
+
+/* ---------- 来源切换 ---------- */
+$$(".seg").forEach((btn) => btn.addEventListener("click", () => {
+  $$(".seg").forEach((b) => b.classList.toggle("active", b === btn));
+  $$(".panel").forEach((p) => p.classList.toggle("active", p.id === `src-${btn.dataset.src}`));
+}));
+
+/* ---------- 配置状态 ---------- */
+const PROVIDERS = {
+  zhipu:     { name: "智谱 GLM",    base: "https://open.bigmodel.cn/api/paas/v4", models: ["glm-4.5-flash", "glm-4.5-air", "glm-4.5", "glm-4-flash"] },
+  deepseek:  { name: "DeepSeek",   base: "https://api.deepseek.com",              models: ["deepseek-chat", "deepseek-reasoner"] },
+  openai:    { name: "OpenAI",     base: "https://api.openai.com/v1",             models: ["gpt-4o-mini", "gpt-4o"] },
+  moonshot:  { name: "月之暗面 Kimi", base: "https://api.moonshot.cn/v1",           models: ["moonshot-v1-8k", "moonshot-v1-32k"] },
+  custom:    { name: "自定义",      base: "",                                      models: [] },
+};
+
+let currentService = "openai";
+
+async function loadConfig() {
+  try {
+    const cfg = await api("/api/config");
+    const chip = $("#engine-chip");
+    const ok = cfg.llm_configured;
+    chip.classList.toggle("off", !ok);
+    chip.innerHTML = ok
+      ? `<span class="dot on"></span>${cfg.service === "siliconflowfree" ? "免费试用服务" : escapeHtml(cfg.model)}`
+      : `<span class="dot"></span>未配置模型`;
+    if (!ok) {
+      $("#warn-banner").classList.remove("hidden");
+      $("#warn-banner span").textContent =
+        "尚未配置大模型：翻译与 AI 功能不可用。点击左侧底部状态栏打开「模型设置」。";
+    } else {
+      $("#warn-banner").classList.add("hidden");
+    }
+    $("#dual-checkbox").checked = !!cfg.enable_dual;
+  } catch {
+    $("#engine-chip").innerHTML = '<span class="dot"></span>服务异常';
+    $("#engine-chip").classList.add("off");
+  }
+}
+
+/* ---------- 模型设置弹窗 ---------- */
+const CUSTOM_OPT = "__custom__";
+let lastRealModel = "";   // 最近一次选中的真实模型（用于手动输入/返回切换时恢复）
+
+function fillModelOptions(models, current) {
+  const sel = $("#cfg-model");
+  const opts = [...new Set([...(models || []), ...(current ? [current] : [])])];
+  sel.innerHTML = opts
+    .map((m) => `<option value="${escapeHtml(m)}" ${m === current ? "selected" : ""}>${escapeHtml(m)}</option>`)
+    .join("") + `<option value="${CUSTOM_OPT}">✎ 手动输入…</option>`;
+  if (current && !opts.includes(current)) {
+    sel.value = CUSTOM_OPT;
+  }
+  if (sel.value !== CUSTOM_OPT) lastRealModel = sel.value;
+}
+
+function showModelSelect() {
+  const sel = $("#cfg-model");
+  if (sel.value === CUSTOM_OPT && lastRealModel
+      && [...sel.options].some((o) => o.value === lastRealModel)) {
+    sel.value = lastRealModel;
+  }
+  sel.classList.remove("hidden");
+  $("#cfg-model-text").classList.add("hidden");
+  $("#cfg-model-back").classList.add("hidden");
+}
+
+function showModelText(value) {
+  $("#cfg-model").classList.add("hidden");
+  $("#cfg-model-text").classList.remove("hidden");
+  $("#cfg-model-back").classList.remove("hidden");
+  $("#cfg-model-text").value = value || "";
+  $("#cfg-model-text").focus();
+}
+
+function getModelValue() {
+  if (!$("#cfg-model-text").classList.contains("hidden")) {
+    return $("#cfg-model-text").value.trim();
+  }
+  const v = $("#cfg-model").value;
+  return v === CUSTOM_OPT ? "" : v;
+}
+
+$("#cfg-model").addEventListener("change", () => {
+  const sel = $("#cfg-model");
+  if (sel.value === CUSTOM_OPT) {
+    // 带上刚才选的值，方便在输入框里微调
+    showModelText(lastRealModel);
+  } else {
+    lastRealModel = sel.value;
+  }
+});
+$("#cfg-model-back").addEventListener("click", showModelSelect);
+
+function guessProvider(base) {
+  for (const [key, p] of Object.entries(PROVIDERS)) {
+    if (key !== "custom" && base && base.includes(new URL(p.base).hostname)) return key;
+  }
+  return "custom";
+}
+
+async function openSettings() {
+  $("#settings-modal").classList.remove("hidden");
+  $("#cfg-status").textContent = "";
+  $("#cfg-apikey").value = "";
+  $("#cfg-apikey").placeholder = "不修改请留空";
+
+  const prov = $("#cfg-provider");
+  prov.innerHTML = Object.entries(PROVIDERS)
+    .map(([k, p]) => `<option value="${k}">${escapeHtml(p.name)}</option>`).join("");
+
+  try {
+    const cfg = await api("/api/config");
+    currentService = cfg.service;
+    $$(".pill").forEach((b) => b.classList.toggle("active", b.dataset.service === cfg.service));
+    $("#custom-model-fields").style.display = cfg.service === "openai" ? "" : "none";
+    $("#cfg-baseurl").value = cfg.base_url || "";
+    $("#cfg-qps").value = cfg.qps || 4;
+    $("#cfg-langout").value = cfg.lang_out || "zh";
+    prov.value = guessProvider(cfg.base_url);
+    fillModelOptions(PROVIDERS[prov.value]?.models || [], cfg.model);
+    showModelSelect();
+    if (cfg.has_api_key) {
+      $("#cfg-apikey").placeholder = `已配置 ${cfg.api_key_masked}，不修改请留空`;
+    }
+  } catch (e) {
+    $("#cfg-status").textContent = "读取配置失败：" + e.message;
+  }
+}
+
+$$(".pill").forEach((btn) => btn.addEventListener("click", () => {
+  $$(".pill").forEach((b) => b.classList.toggle("active", b === btn));
+  currentService = btn.dataset.service;
+  $("#custom-model-fields").style.display = currentService === "openai" ? "" : "none";
+}));
+
+$("#cfg-provider").addEventListener("change", () => {
+  const p = PROVIDERS[$("#cfg-provider").value];
+  if (p.base) $("#cfg-baseurl").value = p.base;
+  showModelSelect();
+  fillModelOptions(p.models, getModelValue());
+});
+
+$("#fetch-models-btn").addEventListener("click", async () => {
+  const btn = $("#fetch-models-btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>';
+  try {
+    const r = await api("/api/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        base_url: $("#cfg-baseurl").value.trim(),
+        api_key: $("#cfg-apikey").value.trim(),
+      }),
+    });
+    if (r.models?.length) {
+      fillModelOptions(r.models, getModelValue());
+      showModelSelect();
+      $("#cfg-status").textContent = `获取到 ${r.models.length} 个模型，下拉选择即可`;
+    } else {
+      $("#cfg-status").textContent = r.detail || "未获取到模型列表，可手动输入";
+    }
+  } catch (e) {
+    $("#cfg-status").textContent = "获取失败：" + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-rotate"></i> 列表';
+  }
+});
+
+$("#test-model-btn").addEventListener("click", async () => {
+  const btn = $("#test-model-btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> 测试中…';
+  $("#cfg-status").textContent = "";
+  try {
+    const r = await api("/api/config/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        service: currentService,
+        base_url: $("#cfg-baseurl").value.trim(),
+        api_key: $("#cfg-apikey").value.trim(),
+        model: getModelValue(),
+      }),
+    });
+    $("#cfg-status").textContent = r.detail;
+    toast(r.detail, r.ok ? "ok" : "err");
+  } catch (e) {
+    $("#cfg-status").textContent = "测试失败：" + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-plug-circle-check"></i> 测试连接';
+  }
+});
+
+$("#save-cfg-btn").addEventListener("click", async () => {
+  const body = {
+    service: currentService,
+    base_url: $("#cfg-baseurl").value.trim(),
+    api_key: $("#cfg-apikey").value.trim(),   // 空串 = 后端保留原值
+    model: getModelValue(),
+    qps: parseInt($("#cfg-qps").value, 10) || 4,
+    lang_out: $("#cfg-langout").value,
+    enable_dual: $("#dual-checkbox").checked,
+  };
+  try {
+    const r = await api("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    toast(r.ready ? "设置已保存，即时生效" : `已保存（${r.detail}）`, r.ready ? "ok" : "info");
+    if (r.ready) $("#settings-modal").classList.add("hidden");
+    $("#warn-banner").classList.add("hidden");
+    loadConfig();
+  } catch (e) {
+    toast("保存失败：" + e.message, "err");
+  }
+});
+
+$("#engine-chip").addEventListener("click", openSettings);
+$("#settings-close").addEventListener("click", () => $("#settings-modal").classList.add("hidden"));
+$("#settings-modal .modal-mask").addEventListener("click", () => $("#settings-modal").classList.add("hidden"));
+
+/* ---------- 论文搜索 ---------- */
+function renderResults() {
+  const ul = $("#search-results");
+  ul.innerHTML = "";
+  if (!searchResults.length) {
+    ul.innerHTML = `<li class="no-result">没有找到相关论文，建议换英文关键词再试</li>`;
+    return;
+  }
+  searchResults.forEach((p, i) => {
+    const li = document.createElement("li");
+    const canDownload = !!p.download_url;
+    const venue = p.venue && p.venue !== "arXiv" ? escapeHtml(p.venue) : "arXiv";
+    li.innerHTML = `
+      <div class="paper-meta">
+        <p class="paper-title">${escapeHtml(p.title)}</p>
+        <p class="paper-sub">${escapeHtml((p.authors || []).slice(0, 3).join(", "))}
+          ${p.year ? `· ${p.year}` : ""} · ${venue}
+          ${canDownload ? "" : ' · <span class="no-pdf">无开放获取 PDF</span>'}</p>
+      </div>
+      <button class="btn small paper-btn" data-i="${i}" ${canDownload ? "" : "disabled"}>
+        <i class="fa-solid fa-language"></i> 翻译</button>`;
+    ul.appendChild(li);
+  });
+  ul.querySelectorAll(".paper-btn").forEach((btn) =>
+    btn.addEventListener("click", () => translatePaper(searchResults[btn.dataset.i], btn)));
+}
+
+async function doSearch() {
+  const q = $("#search-input").value.trim();
+  if (!q) return;
+  const status = $("#search-status");
+  $("#search-btn").disabled = true;
+  $("#search-btn").innerHTML = '<span class="spin"></span>';
+  status.innerHTML = '<span class="spin"></span> 正在检索 arXiv 与 Semantic Scholar…';
+  $("#search-results").innerHTML = "";
+  try {
+    const data = await api(`/api/search?q=${encodeURIComponent(q)}&limit=10`);
+    searchResults = data.results;
+    status.textContent = `找到 ${searchResults.length} 篇论文`;
+    renderResults();
+  } catch (e) {
+    status.textContent = "";
+    toast("搜索失败：" + e.message, "err");
+  } finally {
+    $("#search-btn").disabled = false;
+    $("#search-btn").innerHTML = "<span>搜索</span>";
+  }
+}
+
+async function translatePaper(paper, btn) {
+  btn.disabled = true;
+  try {
+    await api("/api/tasks/paper", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paper, dual: $("#dual-checkbox").checked }),
+    });
+    toast("已加入翻译任务", "ok");
+    switchView("tasks");
+    refreshTasks();
+  } catch (e) {
+    btn.disabled = false;
+    toast("创建任务失败：" + e.message, "err");
+  }
+}
+
+/* ---------- 上传 / 链接 ---------- */
+async function uploadFile(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith(".pdf")) { toast("请选择 PDF 文件", "err"); return; }
+  const dz = $("#dropzone");
+  const orig = dz.innerHTML;
+  dz.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><p>上传中…</p>';
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("dual", $("#dual-checkbox").checked);
+  try {
+    await api("/api/tasks/upload", { method: "POST", body: fd });
+    dz.innerHTML = '<i class="fa-solid fa-circle-check ok"></i><p>已创建翻译任务</p>';
+    toast("上传成功，已开始翻译", "ok");
+    setTimeout(() => { dz.innerHTML = orig; bindDropzone(); }, 1800);
+    switchView("tasks");
+    refreshTasks();
+  } catch (e) {
+    dz.innerHTML = orig;
+    bindDropzone();
+    toast("上传失败：" + e.message, "err");
+  }
+}
+
+function bindDropzone() {
+  const dz = $("#dropzone");
+  const fi = $("#file-input");
+  dz.onclick = () => fi.click();
+  dz.ondragover = (e) => { e.preventDefault(); dz.classList.add("drag"); };
+  dz.ondragleave = () => dz.classList.remove("drag");
+  dz.ondrop = (e) => {
+    e.preventDefault();
+    dz.classList.remove("drag");
+    uploadFile(e.dataTransfer.files[0]);
+  };
+  fi.onchange = () => { uploadFile(fi.files[0]); fi.value = ""; };
+}
+
+async function translateFromInput() {
+  const input = $("#url-input").value.trim();
+  if (!input) return;
+  const btn = $("#url-btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>';
+  try {
+    await api("/api/tasks/input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input, dual: $("#dual-checkbox").checked }),
+    });
+    $("#url-input").value = "";
+    toast("已加入翻译任务", "ok");
+    switchView("tasks");
+    refreshTasks();
+  } catch (e) {
+    toast("创建任务失败：" + e.message, "err");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "<span>获取并翻译</span>";
+  }
+}
+
+/* ---------- 任务列表 ---------- */
+const STATUS_TEXT = {
+  queued: "排队中", downloading: "下载中", translating: "翻译中",
+  done: "完成", failed: "失败", canceled: "已取消",
+};
+const RUNNING = ["queued", "downloading", "translating"];
+
+function taskHtml(t) {
+  const chip = `<span class="status-chip status-${t.status}">${STATUS_TEXT[t.status] || t.status}</span>`;
+  const running = RUNNING.includes(t.status);
+  let bar = "";
+  if (running) {
+    const det = t.progress != null;
+    bar = `<div class="bar ${det ? "" : "indeterminate"}">
+             <div style="width:${det ? t.progress : 30}%"></div></div>`;
+  }
+  const actions = [];
+  const readable = !running && (t.has_source || t.has_mono || t.has_dual);
+  if (readable) actions.push(
+    `<button class="act read" data-read="${t.id}"
+       data-kinds="${t.has_source ? "source" : ""},${t.has_mono ? "mono" : ""},${t.has_dual ? "dual" : ""}">
+       <i class="fa-solid fa-book-open"></i> 阅读</button>`);
+  if (!running) actions.push(
+    `<button class="act ai" data-summary="${t.id}" ${t.has_source ? "" : "disabled"}>
+       <i class="fa-solid fa-wand-magic-sparkles"></i> AI 概括</button>`);
+  if (t.has_mono) actions.push(`<a class="act dl" href="/api/tasks/${t.id}/file/mono">译文</a>`);
+  if (t.has_dual) actions.push(`<a class="act dl" href="/api/tasks/${t.id}/file/dual">双语对照</a>`);
+  if (t.has_source) actions.push(`<a class="act dl" href="/api/tasks/${t.id}/file/source">原文</a>`);
+  if (running) actions.push(`<button class="act cancel" data-cancel="${t.id}">取消</button>`);
+  if (!running) actions.push(`<button class="act del" data-del="${t.id}" title="删除">
+      <i class="fa-solid fa-trash-can"></i></button>`);
+
+  const meta = [];
+  if (t.stage && running) meta.push(escapeHtml(t.stage));
+  if (t.status === "translating" && t.progress != null) meta.push(`${Math.round(t.progress)}%`);
+  if (t.status === "done" && t.finished_at)
+    meta.push("完成于 " + escapeHtml(t.finished_at.slice(5, 16).replace("T", " ")));
+  if (t.status === "queued") meta.push("等待空闲翻译槽…");
+
+  return `<li>
+    <div class="task-row">
+      <div class="task-info">
+        <div class="task-title">${escapeHtml(t.title)}${chip}
+          <span class="task-src">· ${sourceText(t.source)}</span></div>
+        <div class="task-meta">${meta.join(" · ") || "&nbsp;"}</div>
+      </div>
+      <div class="task-actions">${actions.join("")}</div>
+    </div>
+    ${bar}
+    ${t.error ? `<div class="task-error"><i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(t.error)}</div>` : ""}
+  </li>`;
+}
+
+function sourceText(s) {
+  return { upload: "本地上传", search: "联网搜索", input: "链接/ID" }[s] || s;
+}
+
+async function refreshTasks() {
+  try {
+    const data = await api("/api/tasks?limit=50");
+    const ul = $("#task-list");
+    ul.innerHTML = data.tasks.map(taskHtml).join("");
+    $("#tasks-empty").style.display = data.tasks.length ? "none" : "flex";
+
+    const runningCount = data.tasks.filter((t) => RUNNING.includes(t.status)).length;
+    const badge = $("#nav-task-badge");
+    badge.classList.toggle("hidden", runningCount === 0);
+    badge.textContent = runningCount;
+
+    ul.querySelectorAll("[data-cancel]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        try { await api(`/api/tasks/${b.dataset.cancel}/cancel`, { method: "POST" }); refreshTasks(); }
+        catch (e) { toast("取消失败：" + e.message, "err"); }
+      }));
+    ul.querySelectorAll("[data-del]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        if (!confirm("确定删除这条记录吗？其原文与译文文件将一并删除。")) return;
+        try { await api(`/api/tasks/${b.dataset.del}`, { method: "DELETE" }); refreshTasks(); toast("已删除", "ok"); }
+        catch (e) { toast("删除失败：" + e.message, "err"); }
+      }));
+    ul.querySelectorAll("[data-summary]").forEach((b) =>
+      b.addEventListener("click", () => openSummary(b.dataset.summary)));
+    ul.querySelectorAll("[data-read]").forEach((b) =>
+      b.addEventListener("click", () => openViewer(b.dataset.read, b.dataset.kinds)));
+  } catch { /* 服务未就绪时静默 */ }
+}
+
+/* ---------- AI 概括弹窗 ---------- */
+function switchView(name) {
+  $$(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
+}
+
+function renderMindmap(mdText) {
+  // 解析 "## 一级节点" / "- 子节点" 为两列思维导图
+  const lines = (mdText || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  let title = "论文结构";
+  const branches = [];
+  let cur = null;
+  for (const line of lines) {
+    if (/^#\s+/.test(line)) { title = line.replace(/^#\s+/, ""); continue; }
+    if (/^#{2,3}\s+/.test(line)) {
+      cur = { label: line.replace(/^#{2,3}\s+/, ""), leaves: [] };
+      branches.push(cur);
+    } else if (/^[-*]\s+/.test(line)) {
+      const leaf = line.replace(/^[-*]\s+/, "").replace(/\*\*/g, "");
+      if (!cur) { cur = { label: "要点", leaves: [] }; branches.push(cur); }
+      cur.leaves.push(leaf);
+    }
+  }
+  if (!branches.length) return `<div class="md">${md(mdText)}</div>`;
+
+  const colors = ["c1", "c2", "c3", "c4", "c5", "c6"];
+  const root = `<div class="mm-root"><i class="fa-solid fa-file-lines"></i>${escapeHtml(title)}</div>`;
+  const cols = branches.map((b, i) => `
+    <div class="mm-branch ${colors[i % colors.length]}">
+      <div class="mm-node">${escapeHtml(b.label)}</div>
+      ${b.leaves.map((l) => `<div class="mm-leaf">${escapeHtml(l)}</div>`).join("")}
+    </div>`).join("");
+  return `<div class="mindmap">${root}<div class="mm-branches">${cols}</div></div>`;
+}
+
+function renderSummary(data) {
+  const tabs = `
+    <div class="sum-tabs">
+      <button class="sum-tab active" data-tab="summary"><i class="fa-solid fa-align-left"></i> 内容概括</button>
+      <button class="sum-tab" data-tab="mindmap"><i class="fa-solid fa-diagram-project"></i> 思维导图</button>
+      <button class="sum-tab" data-tab="keywords"><i class="fa-solid fa-tags"></i> 关键词</button>
+    </div>
+    <div id="sum-summary" class="sum-pane active md">${md(data.summary)}</div>
+    <div id="sum-mindmap" class="sum-pane">${renderMindmap(data.mindmap)}</div>
+    <div id="sum-keywords" class="sum-pane">
+      <div class="kw-grid">
+        ${(data.keywords || []).map((k) => `<button class="kw-chip" data-kw="${escapeHtml(k)}">${escapeHtml(k)}</button>`).join("")
+          || '<p class="muted">未提取到关键词</p>'}
+      </div>
+      <div id="kw-detail" class="kw-detail hidden"></div>
+    </div>`;
+
+  $("#modal-body").innerHTML = tabs;
+  $$(".sum-tab").forEach((t) => t.addEventListener("click", () => {
+    $$(".sum-tab").forEach((x) => x.classList.toggle("active", x === t));
+    $$(".sum-pane").forEach((p) => p.classList.toggle("active", p.id === `sum-${t.dataset.tab}`));
+  }));
+  $$(".kw-chip").forEach((c) => c.addEventListener("click", () => explainKeyword(c.dataset.kw)));
+}
+
+async function openSummary(taskId) {
+  $("#summary-modal").classList.remove("hidden");
+  $("#modal-task-title").textContent = currentTaskTitle;
+  $("#modal-body").innerHTML =
+    `<div class="sum-loading"><span class="spin big"></span><p>AI 正在阅读论文并生成概括…</p>
+     <p class="muted small">通常需要 10-60 秒，取决于论文长度与模型速度</p></div>`;
+
+  try {
+    let data;
+    try {
+      data = await api(`/api/tasks/${taskId}/summary`);   // 有缓存直接用
+    } catch {
+      data = await api(`/api/tasks/${taskId}/summarize`, { method: "POST" });
+    }
+    currentSummary = data;
+    renderSummary(data);
+  } catch (e) {
+    $("#modal-body").innerHTML =
+      `<div class="sum-error"><i class="fa-solid fa-circle-xmark"></i>
+       <p>${escapeHtml(e.message)}</p></div>`;
+  }
+}
+
+async function explainKeyword(kw) {
+  const box = $("#kw-detail");
+  $$(".sum-tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === "keywords"));
+  $$(".sum-pane").forEach((p) => p.classList.toggle("active", p.id === "sum-keywords"));
+  box.classList.remove("hidden");
+  box.innerHTML = `<div class="kw-loading"><span class="spin"></span> 正在解释「${escapeHtml(kw)}」…</div>`;
+  try {
+    const data = await api("/api/explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword: kw, context: currentSummary?.summary || "" }),
+    });
+    box.innerHTML = `
+      <div class="kw-head"><i class="fa-solid fa-book-open"></i>
+        <b>${escapeHtml(kw)}</b>
+        <button class="kw-close" id="kw-close"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="md">${md(data.explanation)}</div>
+      ${data.related?.length ? `<div class="kw-related">相关：
+        ${data.related.map((r) => `<button class="kw-chip sm" data-kw="${escapeHtml(r)}">${escapeHtml(r)}</button>`).join("")}
+      </div>` : ""}`;
+    $("#kw-close").addEventListener("click", () => box.classList.add("hidden"));
+    box.querySelectorAll(".kw-chip").forEach((c) =>
+      c.addEventListener("click", () => explainKeyword(c.dataset.kw)));
+  } catch (e) {
+    box.innerHTML = `<div class="kw-loading err"><i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+$("#modal-close").addEventListener("click", () => $("#summary-modal").classList.add("hidden"));
+$(".modal-mask").addEventListener("click", () => $("#summary-modal").classList.add("hidden"));
+
+/* ---------- 清空历史 ---------- */
+$("#clear-btn").addEventListener("click", async () => {
+  const hasRunning = $$("#task-list .status-chip")
+    .some((c) => RUNNING.includes(c.className.replace("status-chip status-", "").trim()));
+  const msg = hasRunning
+    ? "将删除全部【已完成/失败/已取消】的历史记录（进行中的任务保留），确定吗？"
+    : "确定清空全部历史记录吗？对应的原文与译文文件将一并删除。";
+  if (!confirm(msg)) return;
+  try {
+    const r = await api("/api/tasks", { method: "DELETE" });
+    refreshTasks();
+    toast(`已删除 ${r.deleted} 条记录`, "ok");
+  } catch (e) { toast("清空失败：" + e.message, "err"); }
+});
+
+/* ---------- 其他 ---------- */
+$("#search-btn").addEventListener("click", doSearch);
+$("#search-input").addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+$("#url-btn").addEventListener("click", translateFromInput);
+$("#url-input").addEventListener("keydown", (e) => { if (e.key === "Enter") translateFromInput(); });
+$("#refresh-btn").addEventListener("click", refreshTasks);
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+bindDropzone();
+loadConfig();
+refreshTasks();
+setInterval(refreshTasks, 3000);
+
+/* ================= PDF 阅读器 ================= */
+if (typeof pdfjsLib !== "undefined") {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+}
+
+const V = { task: null, kinds: {}, kind: "source", doc: null, page: 1, scale: 1.0,
+            rendering: false, renderSeq: 0, loadSeq: 0 };
+const KIND_NAMES = { source: "原文", mono: "译文", dual: "双语对照" };
+
+function switchSide(name) {
+  $$(".side-tab").forEach((t) => t.classList.toggle("active", t.dataset.side === name));
+  $$(".side-pane").forEach((p) => p.classList.toggle("active", p.id === `side-${name}`));
+}
+$$(".side-tab").forEach((t) => t.addEventListener("click", () => switchSide(t.dataset.side)));
+
+async function openViewer(taskId, kindsStr) {
+  try {
+    V.task = await api(`/api/tasks/${taskId}`);
+  } catch (e) { toast("打开失败：" + e.message, "err"); return; }
+  const [hasSrc, hasMono, hasDual] = (kindsStr || "").split(",");
+  V.kinds = { source: hasSrc === "source", mono: hasMono === "mono", dual: hasDual === "dual" };
+  V.kind = V.kinds.source ? "source" : (V.kinds.mono ? "mono" : "dual");
+  V.page = 1; V.scale = 1.0;
+  $("#viewer-title").textContent = V.task.title;
+  buildKindPills();
+  $("#viewer-modal").classList.remove("hidden");
+  switchSide("annots");
+  await loadAnnotations();
+  await loadDoc();
+}
+
+function buildKindPills() {
+  $("#viewer-kind").innerHTML = Object.entries(KIND_NAMES).map(([k, n]) =>
+    `<button class="vkind ${k === V.kind ? "active" : ""}" data-vkind="${k}"
+       ${V.kinds[k] ? "" : "disabled"}>${n}</button>`).join("");
+  $$(".vkind:not([disabled])").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (b.dataset.vkind === V.kind) return;
+      V.kind = b.dataset.vkind; V.page = 1;
+      buildKindPills();
+      await loadDoc();
+    }));
+}
+
+async function loadDoc() {
+  const load = ++V.loadSeq;
+  // 等待进行中的渲染自然结束（绝不 cancel：取消渲染会毒死 pdf.js worker，
+  // 导致本次会话所有后续渲染永久挂起）。单页渲染 <1s，等待成本可忽略。
+  while (V.rendering) {
+    await new Promise((r) => setTimeout(r, 30));
+    if (load !== V.loadSeq) return;
+  }
+
+  // 文档按 kind 缓存，切换即秒开；首次加载走网络
+  V.doc = null;
+  const cacheKey = `${V.task.id}:${V.kind}`;
+  V.docs ||= {};
+  let doc = V.docs[cacheKey];
+  if (!doc) {
+    // 换全新画布元素，避开 pdf.js 的画布复用锁
+    const wrap = $("#viewer-page-wrap");
+    const freshCanvas = document.createElement("canvas");
+    freshCanvas.id = "viewer-canvas";
+    const freshLayer = document.createElement("div");
+    freshLayer.id = "viewer-textlayer";
+    freshLayer.className = "textLayer";
+    wrap.replaceChildren(freshCanvas, freshLayer);
+    $("#viewer-loading").classList.remove("hidden");
+    $("#viewer-page-wrap").classList.add("hidden");
+    try {
+      doc = await pdfjsLib.getDocument({
+        url: `/api/tasks/${V.task.id}/file/${V.kind}`,
+      }).promise;
+    } catch (e) {
+      if (load === V.loadSeq) {
+        $("#viewer-loading").innerHTML =
+          `<p style="color:var(--err)">PDF 加载失败：${escapeHtml(e.message || e)}</p>`;
+      }
+      return;
+    }
+    if (load !== V.loadSeq) {   // 已被更新的加载取代：放下引用即可，
+      V.docs[cacheKey] = doc;   // 千万不要 destroy——并发销毁会毒死共享 worker
+      return;
+    }
+    V.docs[cacheKey] = doc;
+    $("#viewer-loading").classList.add("hidden");
+  }
+  V.doc = doc;
+  V.page = Math.min(Math.max(1, V.page), V.doc.numPages);
+  $("#pg-total").textContent = V.doc.numPages;
+  $("#viewer-page-wrap").classList.remove("hidden");
+  await renderPage();
+}
+
+async function renderPage() {
+  if (!V.doc) return;
+  const seq = ++V.renderSeq;
+  // 串行化：等上一次渲染自然完成
+  while (V.rendering) {
+    await new Promise((r) => setTimeout(r, 30));
+    if (seq !== V.renderSeq) return;
+  }
+  if (seq !== V.renderSeq || !V.doc) return;   // 已被新请求取代
+  V.rendering = true;
+  try {
+    // 视觉层：服务端渲染的 PNG（任何浏览器都可靠）
+    const page = await V.doc.getPage(V.page);
+    if (seq !== V.renderSeq || !V.doc) return;
+    const vp = page.getViewport({ scale: V.scale });
+    const wrap = $("#viewer-page-wrap");
+    const img = document.createElement("img");
+    img.id = "viewer-canvas";
+    img.alt = "";
+    img.style.width = Math.floor(vp.width) + "px";
+    img.style.height = Math.floor(vp.height) + "px";
+    img.style.display = "block";
+    const layer = document.createElement("div");
+    layer.id = "viewer-textlayer";
+    layer.className = "textLayer";
+    const old = document.getElementById("viewer-canvas");
+    const oldLayer = document.getElementById("viewer-textlayer");
+    if (old) old.replaceWith(img); else wrap.prepend(img);
+    if (oldLayer) oldLayer.replaceWith(layer); else wrap.appendChild(layer);
+    img.src = `/api/tasks/${V.task.id}/page/${V.kind}/${V.page}?zoom=${V.scale}`;
+
+    // 文字层：pdf.js getTextContent（主线程 DOM 操作，实测可靠）
+    await renderTextLayer(page, vp);
+  } catch (e) {
+    toast("页面渲染失败：" + (e.message || e), "err");
+  } finally {
+    V.rendering = false;
+    if (seq === V.renderSeq) {
+      $("#pg-input").value = V.page;
+      $("#zoom-ind").textContent = Math.round(V.scale * 100) + "%";
+    }
+  }
+}
+
+async function renderTextLayer(page, vp) {
+  const layer = $("#viewer-textlayer");
+  layer.innerHTML = "";
+  const tc = await page.getTextContent();
+  for (const it of tc.items) {
+    if (!it.str) continue;
+    const tx = pdfjsLib.Util.transform(vp.transform, it.transform);
+    const fh = Math.hypot(tx[2], tx[3]);
+    const angle = Math.atan2(tx[1], tx[0]);
+    const span = document.createElement("span");
+    span.textContent = it.str;
+    span.style.left = tx[4] + "px";
+    span.style.top = (tx[5] - fh) + "px";
+    span.style.fontSize = fh + "px";
+    if (angle) span.style.transform = `rotate(${angle}rad)`;
+    layer.appendChild(span);
+  }
+}
+
+/* 翻页 / 缩放 */
+async function gotoPage(p) {
+  if (!V.doc) return;
+  p = Math.min(Math.max(1, p), V.doc.numPages);
+  if (p === V.page) return;
+  V.page = p;
+  await renderPage();
+}
+$("#pg-prev").addEventListener("click", () => gotoPage(V.page - 1));
+$("#pg-next").addEventListener("click", () => gotoPage(V.page + 1));
+$("#pg-input").addEventListener("change", (e) => gotoPage(parseInt(e.target.value, 10) || 1));
+$("#zoom-in").addEventListener("click", () => { V.scale = Math.min(4, V.scale * 1.25); renderPage(); });
+$("#zoom-out").addEventListener("click", () => { V.scale = Math.max(0.5, V.scale / 1.25); renderPage(); });
+$("#viewer-close").addEventListener("click", closeViewer);
+function closeViewer() {
+  $("#viewer-modal").classList.add("hidden");
+  $("#sel-popup").classList.add("hidden");
+  // 只放下引用：不 cancel 渲染、不 destroy 文档（两者都会毒死 pdf.js worker）。
+  // 渲染循环会自然结束；seq 检查保证不会有旧内容写回新视图。
+  V.doc = null;
+  V.docs = {};
+}
+document.addEventListener("keydown", (e) => {
+  if ($("#viewer-modal").classList.contains("hidden")) return;
+  if (e.key === "Escape") closeViewer();
+});
+
+/* ---------- 选中文字 → 弹条 ---------- */
+let lastMouse = { x: 0, y: 0 };
+$("#viewer-scroll").addEventListener("mousemove", (e) => { lastMouse = { x: e.clientX, y: e.clientY }; });
+$("#viewer-scroll").addEventListener("mouseup", (e) => {
+  setTimeout(() => {
+    const sel = window.getSelection();
+    const text = sel ? sel.toString().trim() : "";
+    const inLayer = sel && sel.anchorNode &&
+      !!sel.anchorNode.parentElement?.closest?.("#viewer-textlayer");
+    if (text && inLayer && text.length <= 300) {
+      showSelPopup(text);
+    } else {
+      $("#sel-popup").classList.add("hidden");
+    }
+  }, 10);
+});
+
+function showSelPopup(text) {
+  const pop = $("#sel-popup");
+  pop.dataset.text = text;
+  pop.classList.remove("hidden");
+  const x = Math.min(lastMouse.x + 8, window.innerWidth - 150);
+  const y = Math.max(10, lastMouse.y - 44);
+  pop.style.left = x + "px";
+  pop.style.top = y + "px";
+}
+
+$("#sel-annot").addEventListener("click", () => {
+  const text = $("#sel-popup").dataset.text;
+  $("#sel-popup").classList.add("hidden");
+  window.getSelection()?.removeAllRanges();
+  openAnnotEditor(text);
+});
+$("#sel-explain").addEventListener("click", () => {
+  const text = $("#sel-popup").dataset.text;
+  $("#sel-popup").classList.add("hidden");
+  explainSelection(text);
+});
+
+/* ---------- 批注 ---------- */
+function openAnnotEditor(quote) {
+  switchSide("annots");
+  $("#annot-editor").classList.remove("hidden");
+  $("#annot-quote").textContent = quote;
+  $("#annot-note").value = "";
+  $("#annot-note").focus();
+}
+$("#annot-cancel").addEventListener("click", () => $("#annot-editor").classList.add("hidden"));
+$("#annot-save").addEventListener("click", async () => {
+  const note = $("#annot-note").value.trim();
+  if (!note) { toast("请写下笔记内容", "err"); return; }
+  try {
+    await api(`/api/tasks/${V.task.id}/annotations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: V.kind, page: V.page,
+        quote: $("#annot-quote").textContent, note,
+      }),
+    });
+    $("#annot-editor").classList.add("hidden");
+    toast("批注已保存", "ok");
+    await loadAnnotations();
+  } catch (e) { toast("保存失败：" + e.message, "err"); }
+});
+
+async function loadAnnotations() {
+  try {
+    const d = await api(`/api/tasks/${V.task.id}/annotations`);
+    const list = d.annotations || [];
+    $("#annot-count").textContent = list.length;
+    $("#annot-empty").style.display = list.length ? "none" : "flex";
+    $("#annot-list").innerHTML = list.map((a) => `
+      <li class="annot-item" data-aid="${a.id}">
+        <div class="annot-item-head">
+          <span class="annot-badge" data-jump="${a.kind}:${a.page}">${KIND_NAMES[a.kind] || a.kind} · 第${a.page}页</span>
+          <span class="annot-time">${escapeHtml((a.created_at || "").slice(5, 16).replace("T", " "))}</span>
+          <button class="annot-del" title="删除"><i class="fa-solid fa-trash-can"></i></button>
+        </div>
+        <div class="annot-q">${escapeHtml(a.quote)}</div>
+        <div class="annot-n">${escapeHtml(a.note)}</div>
+      </li>`).join("");
+    $("#annot-list").querySelectorAll(".annot-del").forEach((b) =>
+      b.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const aid = b.closest(".annot-item").dataset.aid;
+        if (!confirm("删除这条批注？")) return;
+        try {
+          await api(`/api/tasks/${V.task.id}/annotations/${aid}`, { method: "DELETE" });
+          loadAnnotations();
+        } catch (err) { toast("删除失败：" + err.message, "err"); }
+      }));
+    $("#annot-list").querySelectorAll(".annot-badge").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const [kind, page] = b.dataset.jump.split(":");
+        await jumpTo(kind, parseInt(page, 10));
+      }));
+  } catch { /* 任务无批注文件时静默 */ }
+}
+
+async function jumpTo(kind, page) {
+  if (!V.kinds[kind]) return;
+  if (kind !== V.kind) {
+    V.kind = kind; V.page = page;
+    buildKindPills();
+    await loadDoc();
+  } else {
+    await gotoPage(page);
+  }
+  $("#viewer-page-wrap").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* ---------- 选中内容 AI 解释 ---------- */
+async function explainSelection(text) {
+  if (!text) return;
+  switchSide("explain");
+  $("#explain-result").innerHTML =
+    `<div class="kw-loading"><span class="spin"></span> AI 正在解释选中的内容…</div>`;
+  try {
+    const d = await api("/api/explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword: text, task_id: V.task.id }),
+    });
+    $("#explain-result").innerHTML = `
+      <div class="kw-head"><i class="fa-solid fa-book-open"></i> <b>选中解释</b></div>
+      <div class="annot-q">${escapeHtml(text.slice(0, 160))}</div>
+      <div class="md">${md(d.explanation)}</div>
+      ${d.related?.length ? `<div class="kw-related">相关：
+        ${d.related.map((r) => `<button class="kw-chip sm" data-kw="${escapeHtml(r)}">${escapeHtml(r)}</button>`).join("")}
+      </div>` : ""}`;
+    $("#explain-result").querySelectorAll(".kw-chip").forEach((c) =>
+      c.addEventListener("click", () => explainSelection(c.dataset.kw)));
+  } catch (e) {
+    $("#explain-result").innerHTML =
+      `<div class="kw-loading err"><i class="fa-solid fa-circle-exclamation"></i> ${escapeHtml(e.message)}</div>`;
+  }
+}

@@ -1,0 +1,37 @@
+@echo off
+title AutoTranslate
+cd /d "%~dp0"
+
+rem ===== First run: create venv and install deps =====
+if not exist ".venv\Scripts\python.exe" (
+    echo [Setup] Creating virtual environment...
+    python -m venv .venv
+    if errorlevel 1 (
+        echo [Error] Python not found. Install Python 3.10+ and check "Add to PATH".
+        pause
+        exit /b 1
+    )
+    echo [Setup] Installing dependencies, 1-3 min...
+    .venv\Scripts\python.exe -m pip install -r requirements.txt -q
+    if errorlevel 1 (
+        echo [Error] Failed to install dependencies. Check network and retry.
+        pause
+        exit /b 1
+    )
+)
+
+rem ===== First run: create .env from template =====
+if not exist ".env" (
+    copy .env.example .env >nul
+    echo [Setup] Created .env - fill in your API key, save and close.
+    notepad .env
+)
+
+rem ===== Start =====
+echo.
+echo   AutoTranslate starting... browser will open at http://127.0.0.1:8000
+echo   Close this window to stop the server.
+echo.
+start "" cmd /c "timeout /t 4 >nul & start http://127.0.0.1:8000"
+.venv\Scripts\python.exe run.py
+pause

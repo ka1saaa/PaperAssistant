@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoTranslate · 论文自动翻译</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
+<link rel="stylesheet" href="/static/style.css?v=7">
+</head>
+<body>
+<div class="layout">
+  <!-- ===== 侧边栏 ===== -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon"><i class="fa-solid fa-language"></i></div>
+      <div>
+        <div class="logo-name">AutoTranslate</div>
+        <div class="logo-sub">论文自动翻译</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-view="translate">
+        <i class="fa-solid fa-file-arrow-down"></i><span>翻译论文</span>
+      </button>
+      <button class="nav-item" data-view="tasks">
+        <i class="fa-solid fa-list-check"></i><span>翻译任务</span>
+        <em id="nav-task-badge" class="nav-badge hidden">0</em>
+      </button>
+      <button class="nav-item" data-view="about">
+        <i class="fa-solid fa-circle-info"></i><span>使用说明</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div id="engine-chip" class="engine-chip" title="点击配置模型"><span class="dot"></span>检查配置中…</div>
+      <div class="foot-note">pdf2zh + BabelDOC 驱动<br>保留原版排版与公式图表</div>
+    </div>
+  </aside>
+
+  <!-- ===== 主区域 ===== -->
+  <main class="content">
+    <!-- 顶部提示条 -->
+    <div id="warn-banner" class="warn hidden">
+      <i class="fa-solid fa-triangle-exclamation"></i><span></span>
+    </div>
+    <div id="toast-box"></div>
+
+    <!-- 视图：翻译论文 -->
+    <section id="view-translate" class="view active">
+      <h1 class="page-title">翻译一篇论文</h1>
+      <p class="page-desc">支持联网搜索、本地上传、arXiv 编号或链接，输出保留原排版的中文 PDF，可选双语对照。</p>
+
+      <div class="source-switch">
+        <button class="seg active" data-src="search"><i class="fa-solid fa-magnifying-glass"></i> 联网搜索</button>
+        <button class="seg" data-src="upload"><i class="fa-solid fa-file-arrow-up"></i> 本地上传</button>
+        <button class="seg" data-src="link"><i class="fa-solid fa-link"></i> 链接 / arXiv ID</button>
+      </div>
+
+      <!-- 搜索面板 -->
+      <div id="src-search" class="panel active">
+        <div class="search-row">
+          <div class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+          <input id="search-input" type="text" placeholder="输入论文标题或关键词，支持中英文…" autocomplete="off">
+          <button id="search-btn" class="btn primary"><span>搜索</span></button>
+        </div>
+        <div id="search-status" class="muted small"></div>
+        <ul id="search-results" class="results"></ul>
+      </div>
+
+      <!-- 上传面板 -->
+      <div id="src-upload" class="panel">
+        <div id="dropzone">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <p><b>拖拽 PDF 到此处</b>，或点击选择文件</p>
+          <p class="muted small">仅支持文字版 PDF（扫描件暂不支持）· 100MB 以内</p>
+          <input id="file-input" type="file" accept="application/pdf" hidden>
+        </div>
+      </div>
+
+      <!-- 链接面板 -->
+      <div id="src-link" class="panel">
+        <div class="search-row">
+          <input id="url-input" type="text" placeholder="1706.03762 或 https://arxiv.org/abs/… 或任意 PDF 直链" autocomplete="off">
+          <button id="url-btn" class="btn primary"><span>获取并翻译</span></button>
+        </div>
+        <p class="muted small tip"><i class="fa-solid fa-lightbulb"></i> arXiv 编号会自动补全为官方 PDF 直链</p>
+      </div>
+
+      <label class="dual-toggle">
+        <input id="dual-checkbox" type="checkbox" checked>
+        <span>同时生成双语对照版 PDF</span>
+      </label>
+    </section>
+
+    <!-- 视图：任务 -->
+    <section id="view-tasks" class="view">
+      <div class="tasks-head">
+        <h1 class="page-title">翻译任务</h1>
+        <div class="tasks-head-btns">
+          <button id="clear-btn" class="btn ghost danger"><i class="fa-solid fa-broom"></i> 清空历史</button>
+          <button id="refresh-btn" class="btn ghost"><i class="fa-solid fa-rotate"></i> 刷新</button>
+        </div>
+      </div>
+      <ul id="task-list" class="tasks"></ul>
+      <div id="tasks-empty" class="empty-state">
+        <i class="fa-regular fa-folder-open"></i>
+        <p>暂无任务</p>
+        <p class="muted small">去「翻译论文」搜索或上传一篇论文开始</p>
+      </div>
+    </section>
+
+    <!-- 视图：说明 -->
+    <section id="view-about" class="view">
+      <h1 class="page-title">使用说明</h1>
+      <div class="about-card">
+        <h3><i class="fa-solid fa-magnifying-glass"></i> 三种翻译入口</h3>
+        <p><b>联网搜索</b>：输入标题/关键词 → 选择论文 → 自动下载翻译；<b>本地上传</b>：拖入 PDF 文件；<b>链接</b>：粘贴 arXiv 编号或 PDF 直链。</p>
+        <h3><i class="fa-solid fa-wand-magic-sparkles"></i> AI 概括</h3>
+        <p>任务完成或进行中即可点 <b>AI 概括</b>：生成中文摘要、流程思维导图和核心术语。点术语卡片可查看 AI 解释。</p>
+        <h3><i class="fa-solid fa-download"></i> 下载产物</h3>
+        <p>「译文」为纯中文 PDF（保留原版式）；「双语对照」左英右中；「原文」为原始文件。鼠标悬停任务卡可出现删除按钮。</p>
+        <h3><i class="fa-solid fa-gear"></i> 模型配置</h3>
+        <p>翻译与 AI 概括共用 .env 中的大模型配置（LLM_API_KEY / LLM_BASE_URL / LLM_MODEL），修改后重启服务生效。详细教程见项目内 USAGE.md。</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ===== AI 概括弹窗 ===== -->
+<div id="summary-modal" class="modal hidden">
+  <div class="modal-mask"></div>
+  <div class="modal-card">
+    <button class="modal-close" id="modal-close"><i class="fa-solid fa-xmark"></i></button>
+    <div class="modal-head">
+      <div class="modal-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+      <div>
+        <div class="modal-title">AI 论文概括</div>
+        <div id="modal-task-title" class="modal-sub"></div>
+      </div>
+    </div>
+    <div id="modal-body" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ===== 模型设置弹窗 ===== -->
+<div id="settings-modal" class="modal hidden">
+  <div class="modal-mask"></div>
+  <div class="modal-card settings-card">
+    <button class="modal-close" id="settings-close"><i class="fa-solid fa-xmark"></i></button>
+    <div class="modal-head">
+      <div class="modal-icon gear"><i class="fa-solid fa-gear"></i></div>
+      <div>
+        <div class="modal-title">模型设置</div>
+        <div class="modal-sub">翻译与 AI 功能使用的大模型，保存后即时生效（无需重启）</div>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>翻译服务</label>
+        <div class="pill-group">
+          <button class="pill active" data-service="openai"><i class="fa-solid fa-brain"></i> 自定义大模型</button>
+          <button class="pill" data-service="siliconflowfree"><i class="fa-solid fa-gift"></i> 免费试用服务</button>
+        </div>
+      </div>
+
+      <div id="custom-model-fields">
+        <div class="form-row">
+          <label>服务商</label>
+          <select id="cfg-provider" class="field"></select>
+        </div>
+        <div class="form-row">
+          <label>API 地址</label>
+          <input id="cfg-baseurl" class="field" type="text" placeholder="https://api.example.com/v1">
+        </div>
+        <div class="form-row">
+          <label>API Key</label>
+          <input id="cfg-apikey" class="field" type="password" placeholder="不修改请留空">
+        </div>
+        <div class="form-row">
+          <label>模型</label>
+          <div class="field-row">
+            <select id="cfg-model" class="field"></select>
+            <input id="cfg-model-text" class="field hidden" type="text" placeholder="输入模型名称">
+            <button id="cfg-model-back" class="btn ghost small hidden" title="返回下拉选择">
+              <i class="fa-solid fa-chevron-down"></i></button>
+            <button id="fetch-models-btn" class="btn ghost small" title="从服务商获取可用模型列表">
+              <i class="fa-solid fa-rotate"></i> 列表</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row two-col">
+        <div>
+          <label>翻译频率（QPS）</label>
+          <input id="cfg-qps" class="field" type="number" min="1" max="20" value="4">
+        </div>
+        <div>
+          <label>目标语言</label>
+          <select id="cfg-langout" class="field">
+            <option value="zh">中文（简体）</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="ru">Русский</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="cfg-status" class="small muted"></div>
+      <div class="settings-actions">
+        <button id="test-model-btn" class="btn ghost"><i class="fa-solid fa-plug-circle-check"></i> 测试连接</button>
+        <button id="save-cfg-btn" class="btn primary"><i class="fa-solid fa-floppy-disk"></i> 保存设置</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PDF 阅读器 ===== -->
+<div id="viewer-modal" class="viewer hidden">
+  <div class="viewer-top">
+    <div class="viewer-title" id="viewer-title">阅读论文</div>
+    <div class="viewer-kind" id="viewer-kind"></div>
+    <div class="viewer-ctrl">
+      <button class="vbtn" id="pg-prev" title="上一页"><i class="fa-solid fa-chevron-up"></i></button>
+      <span class="pg-ind"><input id="pg-input" type="number" min="1" value="1"> / <b id="pg-total">?</b></span>
+      <button class="vbtn" id="pg-next" title="下一页"><i class="fa-solid fa-chevron-down"></i></button>
+      <span class="vsep"></span>
+      <button class="vbtn" id="zoom-out" title="缩小"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+      <b class="zoom-ind" id="zoom-ind">100%</b>
+      <button class="vbtn" id="zoom-in" title="放大"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+      <span class="vsep"></span>
+      <button class="vbtn danger" id="viewer-close" title="关闭"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+  </div>
+  <div class="viewer-main">
+    <div class="viewer-scroll" id="viewer-scroll">
+      <div class="viewer-loading" id="viewer-loading"><span class="spin big"></span><p>正在加载 PDF…</p></div>
+      <div id="viewer-page-wrap" class="hidden">
+        <canvas id="viewer-canvas"></canvas>
+        <div id="viewer-textlayer" class="textLayer"></div>
+      </div>
+    </div>
+    <aside class="viewer-side">
+      <div class="side-tabs">
+        <button class="side-tab active" data-side="annots"><i class="fa-solid fa-highlighter"></i> 批注 <em id="annot-count">0</em></button>
+        <button class="side-tab" data-side="explain"><i class="fa-solid fa-wand-magic-sparkles"></i> AI 解释</button>
+      </div>
+      <div id="side-annots" class="side-pane active">
+        <div id="annot-editor" class="annot-editor hidden">
+          <div class="annot-quote" id="annot-quote"></div>
+          <textarea id="annot-note" placeholder="写下你的笔记…"></textarea>
+          <div class="annot-editor-btns">
+            <button class="btn ghost small" id="annot-cancel">取消</button>
+            <button class="btn primary small" id="annot-save"><i class="fa-solid fa-check"></i> 保存批注</button>
+          </div>
+        </div>
+        <ul id="annot-list" class="annot-list"></ul>
+        <div id="annot-empty" class="empty-state small-pad">
+          <i class="fa-solid fa-highlighter"></i>
+          <p class="muted small">在左侧 PDF 中选中文字，点「批注」即可添加笔记</p>
+        </div>
+      </div>
+      <div id="side-explain" class="side-pane">
+        <div id="explain-result">
+          <p class="muted small pad">在 PDF 中选中不懂的术语或句子，点「解释」，AI 会结合论文给出说明</p>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <div id="sel-popup" class="sel-popup hidden">
+    <button id="sel-annot"><i class="fa-solid fa-highlighter"></i> 批注</button>
+    <button id="sel-explain"><i class="fa-solid fa-wand-magic-sparkles"></i> 解释</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="/static/app.js?v=15"></script>
+</body>
+</html>
