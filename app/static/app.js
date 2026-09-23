@@ -1363,10 +1363,30 @@ function renderGraph(animate) {
   satSel.select("circle.halo").attr("opacity", (d) => (d.__fade ?? 1) * 0.14);
 
   if (G.sim) G.sim.stop();
+  // 理想半径：卫星均匀摊开在一个环上（按角度分配初始位置避免扎堆）
+  const RING = Math.min(G.width, G.height) * 0.34;
+  for (let i = 0; i < G.satellites.length; i++) {
+    const n = G.satellites[i];
+    if (n.x == null) {
+      const a = (i / Math.max(1, G.satellites.length)) * 2 * Math.PI - Math.PI / 2;
+      n.x = Math.cos(a) * RING;
+      n.y = Math.sin(a) * RING;
+    }
+  }
+  const radialForce = (alpha) => {
+    for (const n of G.satellites) {
+      const dist = Math.hypot(n.x, n.y) || 1;
+      const k = (RING - dist) * 0.12 * alpha;
+      n.x += (n.x / dist) * k;
+      n.y += (n.y / dist) * k;
+    }
+  };
   G.sim = d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(links).id((d) => d.s2_id).distance(150).strength(0.6))
-    .force("collide", d3.forceCollide(54))
-    .force("charge", d3.forceManyBody().strength(-360))
+    .force("link", d3.forceLink(links).id((d) => d.s2_id)
+      .distance((l) => (l.mother ? 170 : RING)).strength(0.4))
+    .force("collide", d3.forceCollide(58))
+    .force("charge", d3.forceManyBody().strength(-200))
+    .force("ring", radialForce)
     .alpha(animate ? 0.9 : 0.6)
     .on("tick", () => {
       G.g.select("g.links").selectAll("line")
