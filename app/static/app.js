@@ -1570,7 +1570,7 @@ $("#graph-ctx").querySelectorAll("button").forEach((b) =>
   }));
 
 
-/* ================= AI 助手桌宠「小深」 ================= */
+/* ================= AI 助手桌宠「小鱼」 ================= */
 const chatHistory = [];      // [{role, content}]
 
 const aiMessages = $("#ai-messages");
@@ -1611,7 +1611,7 @@ let petWelcomed = false;
 $("#ai-pet").addEventListener("click", () => {
   if (!petWelcomed && !aiChat.classList.contains("hidden")) {
     petWelcomed = true;
-setTimeout(() => addMsg("bot", "嗨～我是小深 🐳 论文助手的首席问答官！\n\n可以问我：\n- 这个工具怎么用（翻译/批注/图谱…）\n- 论文里的概念、方法\n- 或者任何学习上的问题"), 350);
+setTimeout(() => addMsg("bot", "嗨～我是小鱼 🐳 论文助手的首席问答官！\n\n可以问我：\n- 这个工具怎么用（翻译/批注/图谱…）\n- 论文里的概念、方法\n- 或者任何学习上的问题"), 350);
   }
 });
 

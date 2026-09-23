@@ -475,13 +475,13 @@ async def task_outline(task_id: str, kind: str):
     return {"outline": toc}
 
 
-# ---- AI 助手「小深」 ----
+# ---- AI 助手「小鱼」 ----
 
 class ChatBody(BaseModel):
     messages: list[dict]             # [{role: user/assistant, content}, ...]
 
 _CHAT_SYSTEM = (
-    "你是论文助手 PaperAssistant 的内置 AI 助手「小深」，形象是一只可爱的 DeepSeek 鲸鱼女仆。"
+    "你是论文助手 PaperAssistant 的内置 AI 助手「小鱼」，形象是一只可爱的 DeepSeek 鲸鱼女仆。"
     "你熟悉本工具的全部功能：联网搜索论文（arXiv/Semantic Scholar，支持中文关键词）、"
     "保留原排版的 PDF 翻译与双语对照、内置阅读器（划词批注/划词解释）、AI 论文概括"
     "（摘要/思维导图/关键词）、批注导出 Markdown、术语表、文献图谱（引用辐射网络、"
