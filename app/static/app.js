@@ -1588,15 +1588,6 @@ document.addEventListener("pet:chat", () => {       // 桌宠右键 = 打开对�
   if (!opening) aiInput.focus();
   if (window.petAPI) window.petAPI.show();
 });
-$("#ai-pet").addEventListener("click", () => {
-  const opening = aiChat.classList.toggle("hidden");
-  if (window.petAPI && !opening) window.petAPI.setEmotion("happy");
-  if (!opening) {
-    aiMessages.scrollTop = aiMessages.scrollHeight;
-    aiInput.focus();
-    $("#pet-bubble").classList.remove("show");
-  }
-});
 $("#ai-close").addEventListener("click", () => aiChat.classList.add("hidden"));
 
 function addMsg(role, content) {
@@ -1618,12 +1609,13 @@ function botTyping() {
   return div;
 }
 
-// 首次打开时的欢迎语
+// 首次打开对话面板时的欢迎语（右键桌宠触发）
 let petWelcomed = false;
-$("#ai-pet").addEventListener("click", () => {
+document.addEventListener("pet:chat", () => {
   if (!petWelcomed && !aiChat.classList.contains("hidden")) {
     petWelcomed = true;
-setTimeout(() => addMsg("bot", "嗨～我是小鱼 🐳 论文助手的首席问答官！\n\n可以问我：\n- 这个工具怎么用（翻译/批注/图谱…）\n- 论文里的概念、方法\n- 或者任何学习上的问题"), 350);
+    setTimeout(() => addMsg("bot",
+      "嗨～我是小鱼 🐳 论文助手的首席问答官！\n\n可以问我：\n- 这个工具怎么用（翻译/批注/图谱…）\n- 论文里的概念、方法\n- 或者任何学习上的问题"), 350);
   }
 });
 
