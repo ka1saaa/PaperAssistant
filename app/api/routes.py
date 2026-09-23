@@ -13,7 +13,7 @@ from app.config import UPLOAD_DIR
 from app.core import summarizer
 from app.core.glossary import load_entries as load_glossary_entries
 from app.core.glossary import save_entries as save_glossary_entries
-from app.core.llm import LLMError, chat_with
+from app.core.llm import LLMError, chat, chat_with
 from app.core.runtime_config import is_custom_ready, load as load_cfg, save as save_cfg
 from app.core.search import search_papers
 from app.tasks.manager import manager
@@ -473,6 +473,40 @@ async def task_outline(task_id: str, kind: str):
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"目录读取失败：{exc}")
     return {"outline": toc}
+
+
+# ---- AI 助手「小深」 ----
+
+class ChatBody(BaseModel):
+    messages: list[dict]             # [{role: user/assistant, content}, ...]
+
+_CHAT_SYSTEM = (
+    "你是论文助手 PaperAssistant 的内置 AI 助手「小深」，形象是一只可爱的 DeepSeek 鲸鱼女仆。"
+    "你熟悉本工具的全部功能：联网搜索论文（arXiv/Semantic Scholar，支持中文关键词）、"
+    "保留原排版的 PDF 翻译与双语对照、内置阅读器（划词批注/划词解释）、AI 论文概括"
+    "（摘要/思维导图/关键词）、批注导出 Markdown、术语表、文献图谱（引用辐射网络、"
+    "右键菜单：下载/翻译/阅读器打开/AI 分析）、任务管理与模型设置。"
+    "用户问工具用法时给出简洁准确的中文指引；也回答论文阅读、学术问题。"
+    "回答保持友好口语化，必要时用 markdown 列表，不要过长。"
+)
+
+
+@router.post("/chat")
+async def ai_chat(body: ChatBody) -> dict:
+    """AI 助手对话（使用 .env/模型设置中配置的大模型，如 DeepSeek）。"""
+    if not body.messages:
+        raise HTTPException(status_code=400, detail="消息不能为空")
+    msgs = [{"role": "system", "content": _CHAT_SYSTEM}]
+    for m in body.messages[-20:]:    # 只带最近 20 条，控制 token
+        role = m.get("role")
+        content = str(m.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            msgs.append({"role": role, "content": content[:6000]})
+    try:
+        reply = await chat(msgs, temperature=0.7)
+    except LLMError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"reply": reply}
 
 
 # ---- 论文图谱（引用辐射网络，Semantic Scholar 免费数据） ----

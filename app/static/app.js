@@ -1568,3 +1568,88 @@ $("#graph-ctx").querySelectorAll("button").forEach((b) =>
                    year: ds.year ? Number(ds.year) : null, venue: "" };
     graphAction(node, b.dataset.act);
   }));
+
+
+/* ================= AI 助手桌宠「小深」 ================= */
+const chatHistory = [];      // [{role, content}]
+
+const aiMessages = $("#ai-messages");
+const aiInput = $("#ai-input");
+const aiChat = $("#ai-chat");
+
+$("#ai-pet").addEventListener("click", () => {
+  const opening = aiChat.classList.toggle("hidden");
+  if (!opening) {
+    aiMessages.scrollTop = aiMessages.scrollHeight;
+    aiInput.focus();
+    $("#pet-bubble").classList.remove("show");
+  }
+});
+$("#ai-close").addEventListener("click", () => aiChat.classList.add("hidden"));
+
+function addMsg(role, content) {
+  const div = document.createElement("div");
+  div.className = "ai-msg " + role;
+  if (role === "bot") div.innerHTML = '<div class="md">' + md(content) + "</div>";
+  else div.textContent = content;
+  aiMessages.appendChild(div);
+  aiMessages.scrollTop = aiMessages.scrollHeight;
+  return div;
+}
+
+function botTyping() {
+  const div = document.createElement("div");
+  div.className = "ai-typing";
+  div.innerHTML = "<i></i><i></i><i></i>";
+  aiMessages.appendChild(div);
+  aiMessages.scrollTop = aiMessages.scrollHeight;
+  return div;
+}
+
+// 首次打开时的欢迎语
+let petWelcomed = false;
+$("#ai-pet").addEventListener("click", () => {
+  if (!petWelcomed && !aiChat.classList.contains("hidden")) {
+    petWelcomed = true;
+setTimeout(() => addMsg("bot", "嗨～我是小深 🐳 论文助手的首席问答官！\n\n可以问我：\n- 这个工具怎么用（翻译/批注/图谱…）\n- 论文里的概念、方法\n- 或者任何学习上的问题"), 350);
+  }
+});
+
+let aiBusy = false;
+async function sendChat() {
+  const text = aiInput.value.trim();
+  if (!text || aiBusy) return;
+  aiBusy = true;
+  aiInput.value = "";
+  addMsg("user", text);
+  const typing = botTyping();
+  chatHistory.push({ role: "user", content: text });
+  try {
+    const r = await api("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: chatHistory }),
+    });
+    typing.remove();
+    chatHistory.push({ role: "assistant", content: r.reply });
+    addMsg("bot", r.reply);
+  } catch (e) {
+    typing.remove();
+    addMsg("bot", "⚠️ " + e.message);
+  } finally {
+    aiBusy = false;
+    aiMessages.scrollTop = aiMessages.scrollHeight;
+  }
+}
+$("#ai-send").addEventListener("click", sendChat);
+aiInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+$("#ai-clear").addEventListener("click", () => {
+  chatHistory.length = 0;
+  aiMessages.innerHTML = "";
+  addMsg("bot", "对话已清空～有什么新问题？");
+});
+// 开场气泡提示（8 秒后消失，之后悬停仍显示）
+setTimeout(() => $("#pet-bubble").classList.add("show"), 2500);
+setTimeout(() => $("#pet-bubble").classList.remove("show"), 11000);

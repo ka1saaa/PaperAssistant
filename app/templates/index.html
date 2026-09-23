@@ -6,7 +6,7 @@
 <title>AutoTranslate · 论文自动翻译</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
-<link rel="stylesheet" href="/static/style.css?v=14">
+<link rel="stylesheet" href="/static/style.css?v=16">
 </head>
 <body>
 <div class="layout">
@@ -384,9 +384,32 @@
   </div>
 </div>
 
+<!-- ===== AI 助手桌宠「小深」 ===== -->
+<div id="ai-pet" title="嗨～点我问问题！">
+  <img src="/static/img/deepseek-mascot.jpg" alt="小深">
+  <span id="pet-bubble" class="pet-bubble">有问题随时问我～</span>
+</div>
+
+<div id="ai-chat" class="ai-chat hidden">
+  <div class="ai-chat-head">
+    <img src="/static/img/deepseek-mascot.jpg" alt="">
+    <div>
+      <div class="ai-chat-title">小深 · AI 助手</div>
+      <div class="ai-chat-sub" id="ai-chat-status">在线</div>
+    </div>
+    <button id="ai-clear" title="清空对话"><i class="fa-solid fa-broom"></i></button>
+    <button id="ai-close" title="收起"><i class="fa-solid fa-chevron-down"></i></button>
+  </div>
+  <div id="ai-messages" class="ai-messages"></div>
+  <div class="ai-input-row">
+    <textarea id="ai-input" rows="1" placeholder="问我任何问题…（Enter 发送）"></textarea>
+    <button id="ai-send" class="btn primary" title="发送"><i class="fa-solid fa-paper-plane"></i></button>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
-<script src="/static/app.js?v=30"></script>
+<script src="/static/app.js?v=31"></script>
 </body>
 </html>
