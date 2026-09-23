@@ -1154,6 +1154,12 @@ const KIND_META = {
   cite:   { label: "引用中心的", grad: "gGreen", color: "#18a058", r: 17 },
 };
 
+// 进入桌宠设置视图时同步表单
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest?.(".nav-item[data-view='pet']");
+  if (btn) setTimeout(syncPetSettingsUI, 50);
+});
+
 function switchToGraphView() {
   $$(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === "graph"));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-graph"));
@@ -1664,10 +1670,7 @@ setTimeout(() => $("#pet-bubble").classList.add("show"), 2500);
 setTimeout(() => $("#pet-bubble").classList.remove("show"), 11000);
 
 
-/* ================= 小鱼桌宠导航栏与设置 ================= */
-const petDock = $("#pet-dock");
-const petSettings = $("#pet-settings");
-
+/* ================= 桌宠设置视图 ================= */
 function syncPetSettingsUI() {
   if (!window.petAPI) return;
   const c = window.petAPI.cfg;
@@ -1677,32 +1680,11 @@ function syncPetSettingsUI() {
   $("#pv-opacity").textContent = Math.round(c.opacity * 100) + "%";
   $("#pc-quiet").checked = !!c.quiet;
   $("#pc-calm").checked = !!c.calm;
-}
-
-$("#pd-settings").addEventListener("click", () => {
-  syncPetSettingsUI();
-  petSettings.classList.toggle("hidden");
-  const cur = window.petAPI?.state;
-  petSettings.querySelectorAll(".ps-states button").forEach((x) =>
+  // 状态按钮高亮跟随当前动画状态
+  const cur = window.petAPI.state;
+  document.querySelectorAll(".ps-states button").forEach((x) =>
     x.classList.toggle("on", x.dataset.state === cur));
-});
-$("#pd-poke").addEventListener("click", () => {
-  if (window.petAPI) window.petAPI._interact();
-});
-$("#pd-chat").addEventListener("click", () => {
-  aiChat.classList.toggle("hidden");
-  if (!aiChat.classList.contains("hidden")) aiInput.focus();
-});
-$("#pd-resetpos").addEventListener("click", () => {
-  window.petAPI?.resetPos();
-  toast("小鱼已回到默认位置", "ok");
-});
-$("#pd-visibility").addEventListener("click", () => {
-  if (!window.petAPI) return;
-  const hidden = document.getElementById("ai-pet").style.display === "none";
-  if (hidden) { window.petAPI.show(); toast("小鱼回来啦～", "ok"); }
-  else { window.petAPI.hide(); toast("小鱼已隐藏（点左侧 👁 再叫回来）", "info"); }
-});
+}
 
 $("#pc-scale").addEventListener("input", (e) => {
   const v = Number(e.target.value) / 100;
@@ -1718,11 +1700,21 @@ $("#pc-quiet").addEventListener("change", (e) =>
   window.petAPI?.applyConfig({ quiet: e.target.checked }));
 $("#pc-calm").addEventListener("change", (e) =>
   window.petAPI?.applyConfig({ calm: e.target.checked }));
+$("#pc-resetpos").addEventListener("click", () => {
+  window.petAPI?.resetPos();
+  toast("小鱼已回到默认位置", "ok");
+});
+$("#pc-hide").addEventListener("click", () => {
+  window.petAPI?.hide();
+  toast("小鱼已隐藏（在「翻译论文」右下角点 👁 唤回）", "info");
+});
 
-// 状态动画手动切换
-petSettings.querySelectorAll(".ps-states button").forEach((b) =>
-  b.addEventListener("click", () => {
-    window.petAPI?.setState(b.dataset.state, true);
-    petSettings.querySelectorAll(".ps-states button").forEach((x) =>
-      x.classList.toggle("on", x === b));
-  }));
+// 状态动画手动预览
+petViewStateBound = false;
+document.addEventListener("click", (e) => {
+  const b = e.target.closest?.(".ps-states button");
+  if (!b) return;
+  window.petAPI?.setState(b.dataset.state, true);
+  document.querySelectorAll(".ps-states button").forEach((x) =>
+    x.classList.toggle("on", x === b));
+});

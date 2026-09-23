@@ -851,42 +851,14 @@ body {
 .ai-input-row textarea:focus { outline: none; border-color: var(--primary); }
 .ai-input-row .btn { padding: 9px 14px; }
 
-/* ===== 小鱼桌宠导航栏（左侧） ===== */
-#pet-dock {
-  position: fixed; left: 0; top: 42%; z-index: 245;
-  width: 40px; padding: 6px 4px;
-  background: var(--card); border: 1.5px solid var(--border);
-  border-left: none; border-radius: 0 12px 12px 0;
-  display: flex; flex-direction: column; gap: 4px;
-  box-shadow: 2px 0 10px rgba(23,29,47,.06);
-}
-#pet-dock button {
-  border: none; background: transparent; color: var(--muted);
-  height: 34px; border-radius: 8px; cursor: pointer; font-size: 15px;
-}
-#pet-dock button:hover { background: var(--primary-soft); color: var(--primary); }
-#pet-dock button.active { background: var(--primary-soft); color: var(--primary); }
-
-#pet-settings {
-  position: fixed; left: 48px; top: 42%; z-index: 245;
-  width: 240px; background: var(--card);
-  border: 1.5px solid var(--border); border-radius: 14px;
-  box-shadow: var(--shadow); padding: 14px 16px;
-}
-.ps-head { font-weight: 700; font-size: 13.5px; margin-bottom: 10px; }
-.ps-head i { color: var(--primary); margin-right: 5px; }
-#pet-settings label { display: block; font-size: 12px; color: var(--muted); margin: 9px 0 4px; }
-#pet-settings input[type="range"] { width: 100%; accent-color: var(--primary); }
-.ps-check { display: flex !important; align-items: center; gap: 7px; font-size: 13px !important; color: var(--text) !important; }
-.ps-check input { accent-color: var(--primary); }
-.ps-states { display: flex; flex-wrap: wrap; gap: 5px; }
+/* ===== 桌宠设置视图 ===== */
+.ps-check { display: flex !important; align-items: center; gap: 8px; font-size: 13.5px !important; color: var(--text) !important; margin: 10px 0 !important; }
+.ps-check input { width: 16px; height: 16px; accent-color: var(--primary); }
+.ps-states { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .ps-states button {
   border: 1.5px solid var(--border); background: var(--card); color: var(--text);
-  font-size: 12px; padding: 4px 10px; border-radius: 8px; cursor: pointer;
+  font-size: 12.5px; padding: 5px 12px; border-radius: 9px; cursor: pointer;
 }
 .ps-states button:hover { border-color: var(--primary); color: var(--primary); }
 .ps-states button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
-.ps-foot { display: flex; justify-content: space-between; margin-top: 12px; }
-.linklike { border: none; background: transparent; color: var(--primary); cursor: pointer; font-size: 12.5px; padding: 2px 4px; }
-.linklike:hover { text-decoration: underline; }
-.linklike.danger { color: var(--err); }
+.pet-view-btns { display: flex; gap: 8px; margin-top: 12px; }
