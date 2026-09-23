@@ -99,20 +99,22 @@
 
 body {
   font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
-  background:
-    linear-gradient(rgba(255, 249, 238, .78), rgba(255, 243, 224, .82)),
-    url("/static/img/bg-reading.jpg") center / cover fixed no-repeat,
-    var(--bg);
-  background-attachment: fixed;
+  background: var(--bg);
   color: var(--text);
   font-size: 14px;
 }
-[data-theme="dark"] body {
-  background:
-    linear-gradient(rgba(14, 17, 26, .88), rgba(14, 17, 26, .93)),
-    url("/static/img/bg-reading.jpg") center / cover fixed no-repeat,
-    var(--bg);
+
+/* ===== 个性化背景层 ===== */
+#app-bg { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+#app-bg-img {
+  position: absolute; inset: -24px;                 /* 外扩避免模糊露边 */
+  background: center / cover no-repeat;
+  filter: brightness(1) blur(0px);
+  transition: filter .2s;
 }
+body { background: var(--bg); }
+#app-bg-tint { position: absolute; inset: 0; }
+#app-bg-img, #app-bg-tint { transition: opacity .3s; }
 
 .hidden { display: none !important; }
 .muted { color: var(--muted); }
@@ -871,3 +873,17 @@ body {
 .ps-states button:hover { border-color: var(--primary); color: var(--primary); }
 .ps-states button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
 .pet-view-btns { display: flex; gap: 8px; margin-top: 12px; }
+
+.bg-modes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.bg-mode {
+  border: 2px solid var(--border); border-radius: 12px; overflow: hidden;
+  background: var(--card); cursor: pointer; padding: 0 0 8px; text-align: center;
+  transition: border .15s;
+}
+.bg-mode:hover { border-color: var(--primary); }
+.bg-mode.on { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
+.bg-mode img { width: 100%; height: 74px; object-fit: cover; display: block; }
+.bg-mode span { display: block; font-size: 12.5px; margin-top: 6px; color: var(--text); }
+.bg-mode.on span { color: var(--primary); font-weight: 600; }
+.bg-none { display: flex; align-items: center; justify-content: center; height: 74px; color: var(--muted); font-size: 20px; background: linear-gradient(135deg,#fdf6ec,#eef4ff); }
+

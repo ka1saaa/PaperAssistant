@@ -697,6 +697,8 @@ bindDropzone();
 loadConfig();
 refreshTasks();
 refreshGlossaryCount();
+applyBg();
+bindBgControls();
 setInterval(refreshTasks, 3000);
 
 /* ---------- 术语表 ---------- */
@@ -1710,3 +1712,114 @@ document.addEventListener("click", (e) => {
   document.querySelectorAll(".ps-states button").forEach((x) =>
     x.classList.toggle("on", x === b));
 });
+
+
+/* ================= 个性化背景 ================= */
+const bgCfg = Object.assign(
+  { mode: "library", brightness: 100, blur: 0 },
+  JSON.parse(localStorage.getItem("app-bg") || "{}")
+);
+
+const BG_BUILTIN = {
+  library: "/static/img/bg-library.jpg",
+  reading: "/static/img/bg-reading.jpg",
+};
+
+function bgSave() {
+  try { localStorage.setItem("app-bg", JSON.stringify(bgCfg)); } catch { }
+}
+
+function applyBg() {
+  const imgEl = document.getElementById("app-bg-img");
+  const tintEl = document.getElementById("app-bg-tint");
+  if (!imgEl || !tintEl) return;
+  const dark = document.documentElement.dataset.theme === "dark";
+
+  // 图片层
+  let url = null;
+  if (bgCfg.mode === "library") url = BG_BUILTIN.library;
+  else if (bgCfg.mode === "reading") url = BG_BUILTIN.reading;
+  else if (bgCfg.mode === "custom") url = "/api/bg-custom";
+  imgEl.style.backgroundImage = url ? `url("${url}")` : "none";
+  imgEl.style.display = url ? "block" : "none";
+  imgEl.style.filter = `brightness(${bgCfg.brightness}%) blur(${bgCfg.blur}px)`;
+
+  // 柔光层：亮度过高时加深保护，保证前景可读
+  const over = dark ? 0.78 : 0.62;
+  const extra = Math.max(0, (bgCfg.brightness - 100)) / 100 * 0.45;
+  const alpha = Math.max(0.08, Math.min(0.9, over + extra));
+  tintEl.style.background = dark
+    ? `rgba(10, 12, 20, ${alpha.toFixed(2)})`
+    : `rgba(255, 249, 238, ${alpha.toFixed(2)})`;
+
+  // 同步高亮与滑块（设置视图存在时）
+  document.querySelectorAll(".bg-mode").forEach((b) =>
+    b.classList.toggle("on", b.dataset.bgm === bgCfg.mode));
+  const pb = $("#pv-bright"), pl = $("#pv-blur");
+  if (pb) pb.textContent = bgCfg.brightness + "%";
+  if (pl) pl.textContent = bgCfg.blur + "px";
+  const sb = $("#bg-brightness"), sl = $("#bg-blur");
+  if (sb) sb.value = bgCfg.brightness;
+  if (sl) sl.value = bgCfg.blur;
+}
+
+function bindBgControls() {
+  document.querySelectorAll(".bg-mode").forEach((b) =>
+    b.addEventListener("click", () => {
+      bgCfg.mode = b.dataset.bgm;
+      bgSave(); applyBg();
+    }));
+  $("#bg-brightness").addEventListener("input", (e) => {
+    bgCfg.brightness = Number(e.target.value);
+    bgSave(); applyBg();
+  });
+  $("#bg-blur").addEventListener("input", (e) => {
+    bgCfg.blur = Number(e.target.value);
+    bgSave(); applyBg();
+  });
+  $("#bg-upload").addEventListener("change", async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const fd = new FormData();
+    fd.append("file", f);
+    $("#bg-msg").textContent = "上传中…";
+    try {
+      await api("/api/background/upload", { method: "POST", body: fd });
+      bgCfg.mode = "custom"; bgSave(); applyBg();
+      $("#bg-msg").textContent = "✅ 已应用为背景";
+      window.__bgTs = Date.now(); applyBg();
+      toast("自定义背景已启用", "ok");
+    } catch (err) {
+      $("#bg-msg").textContent = "上传失败：" + err.message;
+    }
+  });
+  $("#bg-remove-custom").addEventListener("click", async () => {
+    try {
+      await api("/api/background/custom", { method: "DELETE" });
+      $("#bg-msg").textContent = "已删除自定义背景";
+      toast("已删除", "ok");
+      refreshBgThumb();
+    } catch (e) { toast("删除失败：" + e.message, "err"); }
+  });
+  $("#bg-reset").addEventListener("click", () => {
+    Object.assign(bgCfg, { mode: "library", brightness: 100, blur: 0 });
+    bgSave(); applyBg();
+    toast("已恢复默认背景", "ok");
+  });
+}
+
+async function refreshBgThumb() {
+  try {
+    const st = await api("/api/background/status");
+    const btn = document.querySelector('.bg-mode[data-bgm="custom"]');
+    const img = btn.querySelector("img");
+    if (st.custom) {
+      img.src = "/api/bg-custom?t=" + Date.now();
+      img.style.display = "block";
+      btn.querySelector("span").textContent = "我的背景";
+    }
+  } catch { /* 忽略 */ }
+}
+
+// 主题切换时重算柔光颜色
+$("#theme-btn").addEventListener("click", () => setTimeout(applyBg, 50));

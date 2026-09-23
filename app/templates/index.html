@@ -6,9 +6,13 @@
 <title>AutoTranslate · 论文自动翻译</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
-<link rel="stylesheet" href="/static/style.css?v=51">
+<link rel="stylesheet" href="/static/style.css?v=52">
 </head>
 <body>
+<div id="app-bg" aria-hidden="true">
+  <div id="app-bg-img"></div>
+  <div id="app-bg-tint"></div>
+</div>
 <div class="layout">
   <!-- ===== 侧边栏 ===== -->
   <aside class="sidebar">
@@ -33,6 +37,9 @@
       </button>
       <button class="nav-item" data-view="pet">
         <i class="fa-solid fa-fish"></i><span>桌宠设置</span>
+      </button>
+      <button class="nav-item" data-view="personal">
+        <i class="fa-solid fa-palette"></i><span>个性化</span>
       </button>
       <button class="nav-item" data-view="about">
         <i class="fa-solid fa-circle-info"></i><span>使用说明</span>
@@ -192,6 +199,46 @@
             <button data-state="jumping">跳跃</button>
           </div>
           <p class="muted small" style="margin-top:10px">交互提示：左键点小鱼＝互动，右键点小鱼＝打开对话面板</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 视图：个性化 -->
+    <section id="view-personal" class="view">
+      <h1 class="page-title">个性化</h1>
+      <p class="page-desc">背景与显示效果，修改即时生效并自动保存</p>
+      <div class="columns">
+        <div class="card">
+          <h2>背景图片</h2>
+          <div class="bg-modes">
+            <button class="bg-mode" data-bgm="library">
+              <img src="/static/img/bg-library.jpg" alt=""><span>图书馆</span>
+            </button>
+            <button class="bg-mode" data-bgm="reading">
+              <img src="/static/img/bg-reading.jpg" alt=""><span>阅读暖光</span>
+            </button>
+            <button class="bg-mode" data-bgm="none">
+              <span class="bg-none">纯色</span>
+            </button>
+            <button class="bg-mode" data-bgm="custom">
+              <img id="bg-custom-thumb" src="/api/bg-custom" alt="" onerror="this.style.display='none'"><span>我的背景</span>
+            </button>
+          </div>
+          <label style="margin-top:14px">上传自定义背景（jpg / png，8MB 内）</label>
+          <input id="bg-upload" type="file" accept="image/jpeg,image/png" class="field">
+          <div id="bg-msg" class="small muted" style="margin-top:8px"></div>
+          <button id="bg-remove-custom" class="btn ghost small" style="margin-top:10px">
+            <i class="fa-solid fa-trash-can"></i> 删除我的背景</button>
+        </div>
+        <div class="card">
+          <h2>显示效果</h2>
+          <label>背景亮度 <span id="pv-bright">100%</span></label>
+          <input id="bg-brightness" type="range" min="50" max="150" value="100">
+          <label style="margin-top:12px">背景模糊 <span id="pv-blur">0px</span></label>
+          <input id="bg-blur" type="range" min="0" max="12" value="0">
+          <div style="margin-top:16px">
+            <button id="bg-reset" class="btn ghost small"><i class="fa-solid fa-rotate-left"></i> 恢复默认</button>
+          </div>
         </div>
       </div>
     </section>
