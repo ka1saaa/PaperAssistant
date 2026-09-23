@@ -697,8 +697,6 @@ bindDropzone();
 loadConfig();
 refreshTasks();
 refreshGlossaryCount();
-applyBg();
-bindBgControls();
 setInterval(refreshTasks, 3000);
 
 /* ---------- 术语表 ---------- */
@@ -776,10 +774,10 @@ $("#glossary-clear-btn").addEventListener("click", async () => {
 /* ================= PDF 阅读器 ================= */
 if (typeof pdfjsLib !== "undefined") {
   pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+    "/static/vendor/pdf.worker.min.js";
 }
 
-const V = { task: null, kinds: {}, kind: "source", doc: null, page: 1, scale: 1.0,
+var V = { task: null, kinds: {}, kind: "source", doc: null, page: 1, scale: 1.0,
             renderSeq: 0, loadSeq: 0,
             observer: new IntersectionObserver(onSlotIntersect, { root: null, rootMargin: "600px 0px" }),
             slotW: 0, slotH: 0 };
@@ -1139,7 +1137,7 @@ async function explainSelection(text) {
 }
 
 /* ================= 文献图谱（切换式中心导航） ================= */
-const G = { task: null, center: null, mother: null, satellites: [], sim: null,
+var G = { task: null, center: null, mother: null, satellites: [], sim: null,
             svg: null, g: null, defs: null, width: 0, height: 0,
             history: [], loading: false };
 
@@ -1823,3 +1821,8 @@ async function refreshBgThumb() {
 
 // 主题切换时重算柔光颜色
 $("#theme-btn").addEventListener("click", () => setTimeout(applyBg, 50));
+
+
+// 背景初始化（文件末尾调用：此时所有 const 已初始化）
+applyBg();
+bindBgControls();

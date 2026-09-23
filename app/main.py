@@ -37,6 +37,16 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
 @app.middleware("http")
+async def no_cache_static(request: Request, call_next):
+    """静态资源与首页禁用强缓存，避免界面更新后浏览器用旧文件。"""
+    resp = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.startswith("/static/"):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.middleware("http")
 async def access_password_middleware(request: Request, call_next):
     """可选访问密码：设置后拦截全部 API（静态页与登录端点除外）。"""
     pwd = load_cfg().get("access_password") or ""
