@@ -92,6 +92,7 @@ exe_main = EXE(
     name="论文助手",
     debug=False,
     console=False,           # 桌面应用：无黑窗
+    icon=str(PROJECT / "icon.ico"),
     disable_windowed_traceback=False,
 )
 exe_cli = EXE(
