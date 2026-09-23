@@ -135,10 +135,11 @@
         </div>
       </div>
       <div id="graph-legend" class="graph-legend hidden">
-        <span><i style="background:#4f6ef7"></i> 中心论文</span>
-        <span><i style="background:#4f6ef7; opacity:.75; outline:2px dashed #94a8ff; outline-offset:-2px"></i> 母类（上一中心）</span>
-        <span><i style="background:#8f6bff"></i> 中心引用的</span>
-        <span><i style="background:#18a058"></i> 引用中心的</span>
+        <span><i style="background:linear-gradient(135deg,#7c93ff,#3b5bef)"></i> 中心论文</span>
+        <span><i style="background:linear-gradient(135deg,#93a7fb,#5f79e8); outline:2px dashed #94a8ff; outline-offset:-2px"></i> 母类（上一中心）</span>
+        <span><i style="background:#8f6bff"></i> 紫线＝中心引用的</span>
+        <span><i style="background:#18a058"></i> 绿线＝引用中心的</span>
+        <span class="muted">每篇子类论文一种颜色</span>
       </div>
       <div id="graph-hint" class="graph-hint">
         <i class="fa-solid fa-circle-nodes"></i>
@@ -149,6 +150,12 @@
         <svg id="graph-svg" width="100%" height="100%"></svg>
         <div id="graph-detail" class="graph-detail hidden"></div>
         <div id="graph-loading" class="graph-loading hidden"></div>
+      <div id="graph-ctx" class="graph-ctx hidden">
+        <button data-act="download"><i class="fa-solid fa-download"></i> 下载 PDF</button>
+        <button data-act="translate"><i class="fa-solid fa-language"></i> 翻译此论文</button>
+        <button data-act="reader"><i class="fa-solid fa-book-open"></i> 在阅读器中打开</button>
+        <button data-act="ai"><i class="fa-solid fa-wand-magic-sparkles"></i> AI 分析</button>
+      </div>
       </div>
     </section>
 
@@ -380,6 +387,6 @@
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
-<script src="/static/app.js?v=26"></script>
+<script src="/static/app.js?v=30"></script>
 </body>
 </html>

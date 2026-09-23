@@ -53,4 +53,8 @@ async def access_password_middleware(request: Request, call_next):
 
 @app.get("/")
 async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"request": request})
+    return templates.TemplateResponse(
+        request, "index.html",
+        {"request": request},
+        headers={"Cache-Control": "no-cache"},
+    )

@@ -754,3 +754,19 @@ body {
 }
 /* 加载遮罩淡出 */
 .graph-loading { opacity: 1; transition: opacity .35s ease; }
+
+/* 图谱右键菜单 */
+.graph-ctx {
+  position: fixed; z-index: 300; min-width: 190px;
+  background: var(--card); border: 1.5px solid var(--border);
+  border-radius: 12px; box-shadow: 0 10px 32px rgba(18,23,40,.22);
+  padding: 5px; display: flex; flex-direction: column;
+}
+.graph-ctx button {
+  border: none; background: transparent; text-align: left;
+  color: var(--text); font-size: 13px; padding: 9px 13px;
+  border-radius: 8px; cursor: pointer; display: flex; gap: 9px; align-items: center;
+}
+.graph-ctx button:hover { background: var(--primary-soft); color: var(--primary); }
+.graph-ctx button i { width: 15px; text-align: center; color: var(--muted); }
+.graph-ctx button:hover i { color: var(--primary); }

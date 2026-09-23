@@ -158,11 +158,20 @@ class TaskManager:
         return task
 
     async def create_from_paper(self, paper: dict, dual: bool | None = None) -> Task:
-        """从搜索结果创建任务（前端回传所选论文的元数据）。"""
+        """从搜索结果/图谱节点创建任务（前端回传论文元数据）。
+
+        没有现成 PDF 链接时，按标题搜索 arXiv 自动补全。
+        """
         url = paper.get("download_url") or paper.get("pdf_url")
+        title = (paper.get("title") or "").strip()
+        if not url and title:
+            from app.core.search.arxiv import search_arxiv
+            hits = await search_arxiv(title, limit=1)
+            if hits:
+                url = hits[0].download_url
         if not url:
-            raise ValueError("该论文没有可下载的 PDF 链接")
-        task = self._new_task("search", paper.get("title") or "未命名论文", dual)
+            raise ValueError("该论文没有可下载的 PDF（arXiv 按标题也未找到），无法入库")
+        task = self._new_task("search", title or "未命名论文", dual)
         task.pdf_url = url
         await db.insert_task(id=task.id, created_at=task.created_at, source=task.source,
                              title=task.title, lang_out=task.lang_out, dual=int(task.dual),

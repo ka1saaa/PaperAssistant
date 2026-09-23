@@ -1141,6 +1141,12 @@ const G = { task: null, center: null, mother: null, satellites: [], sim: null,
             svg: null, g: null, defs: null, width: 0, height: 0,
             history: [], loading: false };
 
+/* 每篇子类论文的专属颜色（循环取用，视觉可区分） */
+const SAT_PALETTE = [
+  "#7a4fe0", "#0f8a8a", "#e07a2f", "#d94f7c", "#2f7de0", "#8aa30f",
+  "#b5541d", "#12a5a5", "#c33d6e", "#4f8f3a", "#9a5cd0", "#d0a012",
+];
+
 const KIND_META = {
   center: { label: "中心论文", grad: "gBlue", color: "#4f6ef7", r: 30 },
   mother: { label: "母类（上一中心）", grad: "gMother", color: "#7b93f8", r: 18 },
@@ -1189,11 +1195,19 @@ async function openGraph(taskId) {
 
 function flipRel(rel) { return rel === "ref" ? "cite" : "ref"; }
 
+function lighten(hex, ratio) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v) => Math.min(255, Math.round(v + (255 - v) * ratio));
+  const r = ch((n >> 16) & 255), g = ch((n >> 8) & 255), b = ch(n & 255);
+  return "#" + ((r << 16) | (g << 8) | b).toString(16).padStart(6, "0");
+}
+
 function setCenter(node, references, citations) {
   G.center = { ...node, rel: "center", kind: "center" };
   const sats = [];
-  for (const n of references || []) sats.push({ ...n, rel: "ref", kind: "ref" });
-  for (const n of citations || []) sats.push({ ...n, rel: "cite", kind: "cite" });
+  let pi = 0;
+  for (const n of references || []) sats.push({ ...n, rel: "ref", kind: "ref", __pal: pi++ % SAT_PALETTE.length });
+  for (const n of citations || []) sats.push({ ...n, rel: "cite", kind: "cite", __pal: pi++ % SAT_PALETTE.length });
   G.satellites = sats;
   $("#graph-sub").textContent = `中心论文：${G.center.title}（引用网络免费来自 OpenAlex / Semantic Scholar）`;
 }
@@ -1258,8 +1272,7 @@ function ensureDefs() {
   };
   grad("gBlue", "#7c93ff", "#3b5bef");
   grad("gMother", "#93a7fb", "#5f79e8");
-  grad("gPurple", "#a98bff", "#7a4fe0");
-  grad("gGreen", "#3ed17e", "#0f8a4d");
+  SAT_PALETTE.forEach((c, i) => grad("gPal" + i, lighten(c, 0.45), c));
   const f = defs.append("filter").attr("id", "softShadow")
     .attr("x", "-60%").attr("y", "-60%").attr("width", "220%").attr("height", "220%");
   f.append("feDropShadow").attr("dx", 0).attr("dy", 3)
@@ -1316,9 +1329,15 @@ function renderGraph(animate) {
     .on("end", (ev, d) => { if (!ev.active) G.sim.alphaTarget(0); if (d.kind !== "center") { d.fx = null; d.fy = null; } }))
     .on("click", (ev, d) => {
       ev.stopPropagation();
+      hideGraphCtx();
       if (d.kind === "center") { showGraphDetail(d); return; }
       if (d.kind === "mother") { goBackCenter(); return; }
       recenter(d);
+    })
+    .on("contextmenu", (ev, d) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      showGraphCtx(ev, d);
     });
 
   nodeEnter.append("circle").attr("class", "halo")
@@ -1345,10 +1364,14 @@ function renderGraph(animate) {
   all.select("circle.dot")
     .transition().duration(animate ? 450 : 0)
     .attr("r", (d) => KIND_META[d.kind].r)
-    .attr("fill", (d) => `url(#${KIND_META[d.kind].grad})`);
+    .attr("fill", (d) => (d.kind === "ref" || d.kind === "cite")
+      ? `url(#gPal${d.__pal % SAT_PALETTE.length})`
+      : `url(#${KIND_META[d.kind].grad})`);
   all.select("circle.halo")
     .attr("r", (d) => KIND_META[d.kind].r + 7)
-    .attr("fill", (d) => `url(#${KIND_META[d.kind].grad})`)
+    .attr("fill", (d) => (d.kind === "ref" || d.kind === "cite")
+      ? `url(#gPal${d.__pal % SAT_PALETTE.length})`
+      : `url(#${KIND_META[d.kind].grad})`)
     .attr("opacity", (d) => (d.kind === "center" ? 0.2 : 0.14));
   all.select("text.nlabel")
     .text((d) => (d.title.length > 22 ? d.title.slice(0, 21) + "…" : d.title))
@@ -1452,3 +1475,96 @@ function showGraphDetail(d) {
     }
   });
 }
+
+
+/* ================= 图谱右键菜单：下载/翻译/阅读器/AI 分析 ================= */
+function hideGraphCtx() { $("#graph-ctx").classList.add("hidden"); }
+document.addEventListener("click", hideGraphCtx);
+document.addEventListener("scroll", hideGraphCtx, true);
+
+function showGraphCtx(ev, d) {
+  const menu = $("#graph-ctx");
+  menu.dataset.title = d.title;
+  menu.dataset.s2id = d.s2_id;
+  menu.dataset.arxiv = d.arxiv_id || "";
+  menu.dataset.year = d.year || "";
+  // 中心论文已翻译过，不重复提供翻译入口
+  menu.querySelector('[data-act="translate"]').style.display =
+    d.kind === "center" ? "none" : "flex";
+  menu.classList.remove("hidden");
+  const x = Math.min(ev.clientX + 4, window.innerWidth - 200);
+  const y = Math.min(ev.clientY + 4, window.innerHeight - 190);
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+}
+
+/* 复用同标题的已有任务，否则创建新任务（后端自动按标题补 arXiv 链接） */
+async function ensureGraphTask(node) {
+  const data = await api("/api/tasks?limit=100");
+  const hit = data.tasks.find((t) =>
+    t.title.trim().toLowerCase() === node.title.trim().toLowerCase());
+  if (hit) return hit;
+  return await api("/api/tasks/paper", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paper: {
+      title: node.title, year: node.year, venue: node.venue || "OpenAlex",
+      pdf_url: node.arxiv_id ? `https://arxiv.org/pdf/${node.arxiv_id}` : null,
+      arxiv_id: node.arxiv_id, source: "graph",
+    }, dual: $("#dual-checkbox").checked }),
+  });
+}
+
+/* 等待任务的源 PDF 就绪（下载中 → has_source） */
+async function waitForSource(taskId, timeoutMs = 90000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    const t = await api(`/api/tasks/${taskId}`);
+    if (t.has_source) return t;
+    if (t.status === "failed") throw new Error(t.error || "任务失败");
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  throw new Error("下载超时，请稍后在任务列表重试");
+}
+
+async function graphAction(node, action) {
+  hideGraphCtx();
+  toast("正在准备：" + action, "info");
+  try {
+    const t = await ensureGraphTask(node);
+    let fresh = t;
+    if (action !== "translate" && !t.has_source) fresh = await waitForSource(t.id);
+    if (action === "download") {
+      const a = document.createElement("a");
+      a.href = `/api/tasks/${t.id}/file/source`;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast("PDF 已开始下载", "ok");
+    } else if (action === "translate") {
+      toast("已加入翻译任务，可在任务列表查看进度", "ok");
+      switchView("tasks");
+      refreshTasks();
+    } else if (action === "reader") {
+      openViewer(t.id, [fresh.has_source ? "source" : "",
+                        fresh.has_mono ? "mono" : "",
+                        fresh.has_dual ? "dual" : ""].join(","));
+    } else if (action === "ai") {
+      openSummary(t.id);
+    }
+    refreshTasks();
+  } catch (e) {
+    toast(action + "失败：" + e.message, "err");
+  }
+}
+
+$("#graph-ctx").querySelectorAll("button").forEach((b) =>
+  b.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const ds = $("#graph-ctx").dataset;
+    const node = { title: ds.title, s2_id: ds.s2id,
+                   arxiv_id: ds.arxiv === "" ? null : ds.arxiv,
+                   year: ds.year ? Number(ds.year) : null, venue: "" };
+    graphAction(node, b.dataset.act);
+  }));
