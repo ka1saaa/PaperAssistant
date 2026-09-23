@@ -739,3 +739,18 @@ body {
   gap: 14px; color: var(--muted); font-size: 13.5px;
   text-align: center; padding: 0 30px;
 }
+
+#graph-svg .links line.lmother { stroke: #94a8ff; stroke-dasharray: 5,3; }
+#graph-svg .node .mbadge { pointer-events: none; }
+
+/* 图谱文字描边（在连线上也清晰） */
+#graph-svg .node .nlabel,
+#graph-svg .node .mbadge {
+  paint-order: stroke;
+  stroke: var(--card);
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
+  font-weight: 600;
+}
+/* 加载遮罩淡出 */
+.graph-loading { opacity: 1; transition: opacity .35s ease; }

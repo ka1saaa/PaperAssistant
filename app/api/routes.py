@@ -477,6 +477,8 @@ async def task_outline(task_id: str, kind: str):
 
 # ---- 论文图谱（引用辐射网络，Semantic Scholar 免费数据） ----
 
+_GRAPH_RESOLVE_CACHE: dict[str, dict | None] = {}
+
 @router.get("/tasks/{task_id}/graph")
 async def task_graph(task_id: str) -> dict:
     """以任务论文为中心的引用图谱（中心 + 首层邻居）。"""
@@ -486,13 +488,18 @@ async def task_graph(task_id: str) -> dict:
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
     pdf = task.source_pdf()
-    try:
+    # 解析结果按任务缓存：重复打开图谱不再重新请求（上游限流环境下保持稳定）
+    node = _GRAPH_RESOLVE_CACHE.get(task_id)
+    if node is None:
         node = await resolve_center(task.title, pdf)
+        _GRAPH_RESOLVE_CACHE[task_id] = node
+    try:
         data = await get_neighbors(node["s2_id"])
     except GraphError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except httpx.HTTPError:
         raise HTTPException(status_code=502, detail="无法连接 Semantic Scholar，请检查网络")
+    return data
     return data
 
 

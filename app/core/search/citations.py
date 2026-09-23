@@ -188,13 +188,22 @@ async def resolve_center(fallback_title: str, pdf_path=None) -> dict:
         if t and t.strip() and t.strip()[:100] not in candidates:
             candidates.append(t.strip()[:100])
 
-    for cand in candidates:
-        node = await _resolve_oa(cand, arxiv_id)
-        if node is None:
-            node = await _resolve_s2(cand, arxiv_id)
-        if node is not None:
-            logger.info("graph center resolved: %s (%s)", node["title"][:40], node["s2_id"])
-            return node
+    for attempt in range(2):        # 数据源偶发限流/抖动，整体重试一次
+        if attempt:
+            await asyncio.sleep(3)
+        for cand in candidates:
+            node = await _resolve_oa(cand, arxiv_id)
+            if node is None:
+                # S2 兜底命中后，用其准确标题回查 OpenAlex——统一到稳定源，
+                # 保证中心与子节点同一命名空间（S2 拥堵时段子节点依然可用）
+                s2_node = await _resolve_s2(cand, arxiv_id)
+                if s2_node:
+                    node = await _resolve_oa(s2_node["title"], s2_node.get("arxiv_id")) or s2_node
+                else:
+                    node = None
+            if node is not None:
+                logger.info("graph center resolved: %s (%s)", node["title"][:40], node["s2_id"])
+                return node
 
     raise GraphError("未能匹配到该论文的引用数据（OpenAlex / Semantic Scholar 均未收录），"
                      "可能是标题特殊或数据源未收录")
