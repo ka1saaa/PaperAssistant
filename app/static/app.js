@@ -1579,6 +1579,7 @@ const aiChat = $("#ai-chat");
 
 $("#ai-pet").addEventListener("click", () => {
   const opening = aiChat.classList.toggle("hidden");
+  if (window.petAPI && !opening) window.petAPI.setEmotion("happy");
   if (!opening) {
     aiMessages.scrollTop = aiMessages.scrollHeight;
     aiInput.focus();
@@ -1623,6 +1624,7 @@ async function sendChat() {
   aiInput.value = "";
   addMsg("user", text);
   const typing = botTyping();
+  if (window.petAPI) window.petAPI.thinking(true);
   chatHistory.push({ role: "user", content: text });
   try {
     const r = await api("/api/chat", {
@@ -1633,9 +1635,11 @@ async function sendChat() {
     typing.remove();
     chatHistory.push({ role: "assistant", content: r.reply });
     addMsg("bot", r.reply);
+    if (window.petAPI) window.petAPI.thinking(false);
   } catch (e) {
     typing.remove();
     addMsg("bot", "⚠️ " + e.message);
+    if (window.petAPI) { window.petAPI.thinking(false); window.petAPI.setEmotion("angry"); }
   } finally {
     aiBusy = false;
     aiMessages.scrollTop = aiMessages.scrollHeight;

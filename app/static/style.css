@@ -773,25 +773,17 @@ body {
 
 /* ===== AI 助手桌宠「小深」 ===== */
 #ai-pet {
-  position: fixed; right: 22px; bottom: 18px; z-index: 250;
-  width: 84px; height: 84px; border-radius: 50%;
-  border: 3px solid #fff; outline: 3px solid #7c93ff;
-  box-shadow: 0 6px 20px rgba(59, 91, 239, .35);
-  cursor: pointer; overflow: visible;
-  animation: pet-bob 3.2s ease-in-out infinite;
-  transition: transform .2s;
+  position: fixed; right: 30px; bottom: 8px; z-index: 250;
+  width: 138px; height: 150px;
+  cursor: grab; overflow: visible; user-select: none;
+  filter: drop-shadow(0 10px 16px rgba(43, 58, 143, .30));
+  transition: filter .2s;
 }
-#ai-pet:hover { transform: scale(1.08); animation-play-state: paused; }
-#ai-pet img {
-  width: 100%; height: 100%; object-fit: cover;
-  border-radius: 50%; display: block; background: #fff;
-}
-@keyframes pet-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-7px); }
-}
+#ai-pet:hover { filter: drop-shadow(0 12px 20px rgba(43, 58, 143, .45)) brightness(1.04); }
+#ai-pet:active { cursor: grabbing; }
+#ai-pet img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .pet-bubble {
-  position: absolute; right: 96px; top: 6px;
+  position: absolute; right: 142px; top: 22px;
   background: #fff; color: var(--text); font-size: 12.5px;
   border-radius: 12px 12px 3px 12px; padding: 7px 12px;
   box-shadow: var(--shadow); white-space: nowrap;

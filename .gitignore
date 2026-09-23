@@ -28,3 +28,4 @@ build/
 =5.0
 =6.10
 *.spec.bak
+tools/dsh-whale-pet/
