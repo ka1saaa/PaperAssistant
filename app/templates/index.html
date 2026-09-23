@@ -6,7 +6,7 @@
 <title>AutoTranslate · 论文自动翻译</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
-<link rel="stylesheet" href="/static/style.css?v=10">
+<link rel="stylesheet" href="/static/style.css?v=13">
 </head>
 <body>
 <div class="layout">
@@ -27,6 +27,9 @@
       <button class="nav-item" data-view="tasks">
         <i class="fa-solid fa-list-check"></i><span>翻译任务</span>
         <em id="nav-task-badge" class="nav-badge hidden">0</em>
+      </button>
+      <button class="nav-item" data-view="graph">
+        <i class="fa-solid fa-circle-nodes"></i><span>文献图谱</span>
       </button>
       <button class="nav-item" data-view="about">
         <i class="fa-solid fa-circle-info"></i><span>使用说明</span>
@@ -116,6 +119,35 @@
         <i class="fa-regular fa-folder-open"></i>
         <p>暂无任务</p>
         <p class="muted small">去「翻译论文」搜索或上传一篇论文开始</p>
+      </div>
+    </section>
+
+    <!-- 视图：文献图谱 -->
+    <section id="view-graph" class="view">
+      <div class="graph-head">
+        <div>
+          <h1 class="page-title">文献图谱</h1>
+          <div id="graph-sub" class="muted small">以一篇论文为中心辐射相关文献 · 点击子论文切换为中心继续探索</div>
+        </div>
+        <div class="graph-head-btns">
+          <button id="graph-back" class="btn ghost hidden"><i class="fa-solid fa-arrow-left"></i> 上一中心</button>
+          <button id="graph-reload" class="btn ghost hidden"><i class="fa-solid fa-rotate"></i> 重新加载</button>
+        </div>
+      </div>
+      <div id="graph-legend" class="graph-legend hidden">
+        <span><i style="background:#4f6ef7"></i> 中心论文</span>
+        <span><i style="background:#8f6bff"></i> 中心引用的</span>
+        <span><i style="background:#18a058"></i> 引用中心的</span>
+      </div>
+      <div id="graph-hint" class="graph-hint">
+        <i class="fa-solid fa-circle-nodes"></i>
+        <p>在「翻译任务」列表点任意任务的 <b>「图谱」</b> 按钮，即可生成该论文的引用辐射图</p>
+      </div>
+      <div id="graph-error" class="graph-error hidden"></div>
+      <div id="graph-wrap" class="graph-wrap hidden">
+        <svg id="graph-svg" width="100%" height="100%"></svg>
+        <div id="graph-detail" class="graph-detail hidden"></div>
+        <div id="graph-loading" class="graph-loading hidden"></div>
       </div>
     </section>
 
@@ -344,8 +376,9 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
-<script src="/static/app.js?v=18"></script>
+<script src="/static/app.js?v=21"></script>
 </body>
 </html>

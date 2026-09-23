@@ -475,6 +475,40 @@ async def task_outline(task_id: str, kind: str):
     return {"outline": toc}
 
 
+# ---- 论文图谱（引用辐射网络，Semantic Scholar 免费数据） ----
+
+@router.get("/tasks/{task_id}/graph")
+async def task_graph(task_id: str) -> dict:
+    """以任务论文为中心的引用图谱（中心 + 首层邻居）。"""
+    from app.core.search.citations import GraphError, get_neighbors, resolve_center
+
+    task = manager.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    pdf = task.source_pdf()
+    try:
+        node = await resolve_center(task.title, pdf)
+        data = await get_neighbors(node["s2_id"])
+    except GraphError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="无法连接 Semantic Scholar，请检查网络")
+    return data
+
+
+@router.get("/graph/node/{s2_id}")
+async def graph_node(s2_id: str) -> dict:
+    """展开图谱中某个子节点的邻居。"""
+    from app.core.search.citations import GraphError, get_neighbors
+
+    try:
+        return await get_neighbors(s2_id)
+    except GraphError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="无法连接 Semantic Scholar，请检查网络")
+
+
 @router.get("/tasks/{task_id}/annotations")
 async def list_annotations(task_id: str) -> dict:
     if not manager.get(task_id):

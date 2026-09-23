@@ -694,3 +694,48 @@ body {
 .auth-card .modal-icon { margin: 0 auto; background: linear-gradient(135deg, #64748b, #475569); }
 .auth-title { font-weight: 700; font-size: 15px; }
 .auth-card .field { text-align: center; }
+
+/* ===== 文献图谱 ===== */
+.graph-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.graph-hint {
+  background: var(--card); border: 1.5px dashed #c9d2f5; border-radius: var(--radius);
+  padding: 40px 20px; text-align: center; color: var(--muted);
+}
+.graph-hint i { font-size: 34px; color: #aab6f0; display: block; margin-bottom: 10px; }
+.graph-error {
+  background: #fef2f2; color: var(--err); border-radius: 12px;
+  padding: 14px 16px; font-size: 13.5px; margin-bottom: 12px;
+}
+.graph-wrap {
+  position: relative; height: calc(100vh - 210px); min-height: 480px;
+  background: var(--card); border: 1.5px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+#graph-svg .links line { stroke-opacity: .55; stroke-width: 1.6; }
+#graph-svg .links line.lref { stroke: #8f6bff; }
+#graph-svg .links line.lcite { stroke: #18a058; }
+#graph-svg .node .ring { fill: transparent; }
+#graph-svg .node:hover .dot { filter: brightness(1.12); }
+#graph-svg .node .nlabel { fill: var(--text); font-weight: 600; pointer-events: none; }
+.graph-detail {
+  position: absolute; top: 14px; right: 14px; width: 300px;
+  background: var(--card); border: 1.5px solid var(--border);
+  border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow);
+  max-height: calc(100% - 28px); overflow-y: auto;
+}
+.graph-detail .kw-head { font-size: 13.5px; line-height: 1.5; }
+.graph-detail .kw-head b { font-size: 13.5px; }
+.graph-detail-btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+[data-theme="dark"] .graph-error { background: #331a1c; }
+
+.graph-head-btns { display: flex; gap: 8px; }
+.graph-legend { display: flex; gap: 16px; margin-bottom: 10px; font-size: 12.5px; color: var(--muted); }
+.graph-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+.graph-loading {
+  position: absolute; inset: 0; z-index: 5;
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  backdrop-filter: blur(2px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; color: var(--muted); font-size: 13.5px;
+  text-align: center; padding: 0 30px;
+}
