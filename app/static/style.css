@@ -41,7 +41,6 @@
   --viewer-bg: #0e111a;
 }
 
-[data-theme="dark"] body { background: var(--bg); }
 [data-theme="dark"] .search-row input,
 [data-theme="dark"] .field,
 [data-theme="dark"] .annot-editor textarea,
@@ -100,9 +99,19 @@
 
 body {
   font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
-  background: var(--bg);
+  background:
+    linear-gradient(rgba(255, 249, 238, .78), rgba(255, 243, 224, .82)),
+    url("/static/img/bg-reading.jpg") center / cover fixed no-repeat,
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   font-size: 14px;
+}
+[data-theme="dark"] body {
+  background:
+    linear-gradient(rgba(14, 17, 26, .88), rgba(14, 17, 26, .93)),
+    url("/static/img/bg-reading.jpg") center / cover fixed no-repeat,
+    var(--bg);
 }
 
 .hidden { display: none !important; }
