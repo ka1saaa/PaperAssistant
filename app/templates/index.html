@@ -6,7 +6,7 @@
 <title>AutoTranslate · 论文自动翻译</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
-<link rel="stylesheet" href="/static/style.css?v=16">
+<link rel="stylesheet" href="/static/style.css?v=41">
 </head>
 <body>
 <div class="layout">
@@ -385,6 +385,37 @@
 </div>
 
 <!-- ===== AI 助手桌宠「小鱼」 ===== -->
+<!-- ===== 小鱼桌宠导航栏（左侧） ===== -->
+<div id="pet-dock">
+  <button id="pd-visibility" title="显示/隐藏小鱼"><i class="fa-solid fa-eye"></i></button>
+  <button id="pd-settings" title="桌宠设置"><i class="fa-solid fa-sliders"></i></button>
+  <button id="pd-poke" title="戳一戳（互动）"><i class="fa-solid fa-hand-pointer"></i></button>
+  <button id="pd-chat" title="打开对话"><i class="fa-solid fa-comment-dots"></i></button>
+  <button id="pd-resetpos" title="回到默认位置"><i class="fa-solid fa-location-crosshairs"></i></button>
+</div>
+
+<div id="pet-settings" class="hidden">
+  <div class="ps-head"><i class="fa-solid fa-sliders"></i> 小鱼设置</div>
+  <label>大小 <span id="pv-scale">100%</span></label>
+  <input id="pc-scale" type="range" min="60" max="200" value="100">
+  <label>不透明度 <span id="pv-opacity">100%</span></label>
+  <input id="pc-opacity" type="range" min="30" max="100" value="100">
+  <label class="ps-check"><input id="pc-quiet" type="checkbox"> 安静模式（不冒台词）</label>
+  <label class="ps-check"><input id="pc-calm" type="checkbox"> 减少动态（关小剧场）</label>
+  <label>状态动画</label>
+  <div class="ps-states">
+    <button data-state="idle" class="on">待机</button>
+    <button data-state="waving">挥手</button>
+    <button data-state="waiting">等待</button>
+    <button data-state="running">奔跑</button>
+    <button data-state="jumping">跳跃</button>
+  </div>
+  <div class="ps-foot">
+    <button id="pc-resetpos" class="linklike">回默认位置</button>
+    <button id="pc-hide" class="linklike danger">隐藏小鱼</button>
+  </div>
+</div>
+
 <div id="ai-pet" title="小鱼：可以拖我、点我～">
   <span id="pet-bubble" class="pet-bubble">有问题随时问我～</span>
 </div>
@@ -410,6 +441,6 @@
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script src="/static/pet.js?v=2"></script>
-<script src="/static/app.js?v=34"></script>
+<script src="/static/app.js?v=40"></script>
 </body>
 </html>

@@ -1577,6 +1577,11 @@ const aiMessages = $("#ai-messages");
 const aiInput = $("#ai-input");
 const aiChat = $("#ai-chat");
 
+document.addEventListener("pet:chat", () => {       // 桌宠右键 = 打开对话
+  const opening = aiChat.classList.toggle("hidden");
+  if (!opening) aiInput.focus();
+  if (window.petAPI) window.petAPI.show();
+});
 $("#ai-pet").addEventListener("click", () => {
   const opening = aiChat.classList.toggle("hidden");
   if (window.petAPI && !opening) window.petAPI.setEmotion("happy");
@@ -1657,3 +1662,67 @@ $("#ai-clear").addEventListener("click", () => {
 // 开场气泡提示（8 秒后消失，之后悬停仍显示）
 setTimeout(() => $("#pet-bubble").classList.add("show"), 2500);
 setTimeout(() => $("#pet-bubble").classList.remove("show"), 11000);
+
+
+/* ================= 小鱼桌宠导航栏与设置 ================= */
+const petDock = $("#pet-dock");
+const petSettings = $("#pet-settings");
+
+function syncPetSettingsUI() {
+  if (!window.petAPI) return;
+  const c = window.petAPI.cfg;
+  $("#pc-scale").value = Math.round(c.scale * 100);
+  $("#pv-scale").textContent = Math.round(c.scale * 100) + "%";
+  $("#pc-opacity").value = Math.round(c.opacity * 100);
+  $("#pv-opacity").textContent = Math.round(c.opacity * 100) + "%";
+  $("#pc-quiet").checked = !!c.quiet;
+  $("#pc-calm").checked = !!c.calm;
+}
+
+$("#pd-settings").addEventListener("click", () => {
+  syncPetSettingsUI();
+  petSettings.classList.toggle("hidden");
+  const cur = window.petAPI?.state;
+  petSettings.querySelectorAll(".ps-states button").forEach((x) =>
+    x.classList.toggle("on", x.dataset.state === cur));
+});
+$("#pd-poke").addEventListener("click", () => {
+  if (window.petAPI) window.petAPI._interact();
+});
+$("#pd-chat").addEventListener("click", () => {
+  aiChat.classList.toggle("hidden");
+  if (!aiChat.classList.contains("hidden")) aiInput.focus();
+});
+$("#pd-resetpos").addEventListener("click", () => {
+  window.petAPI?.resetPos();
+  toast("小鱼已回到默认位置", "ok");
+});
+$("#pd-visibility").addEventListener("click", () => {
+  if (!window.petAPI) return;
+  const hidden = document.getElementById("ai-pet").style.display === "none";
+  if (hidden) { window.petAPI.show(); toast("小鱼回来啦～", "ok"); }
+  else { window.petAPI.hide(); toast("小鱼已隐藏（点左侧 👁 再叫回来）", "info"); }
+});
+
+$("#pc-scale").addEventListener("input", (e) => {
+  const v = Number(e.target.value) / 100;
+  $("#pv-scale").textContent = e.target.value + "%";
+  window.petAPI?.applyConfig({ scale: v });
+});
+$("#pc-opacity").addEventListener("input", (e) => {
+  const v = Number(e.target.value) / 100;
+  $("#pv-opacity").textContent = e.target.value + "%";
+  window.petAPI?.applyConfig({ opacity: v });
+});
+$("#pc-quiet").addEventListener("change", (e) =>
+  window.petAPI?.applyConfig({ quiet: e.target.checked }));
+$("#pc-calm").addEventListener("change", (e) =>
+  window.petAPI?.applyConfig({ calm: e.target.checked }));
+
+// 状态动画手动切换
+petSettings.querySelectorAll(".ps-states button").forEach((b) =>
+  b.addEventListener("click", () => {
+    window.petAPI?.setState(b.dataset.state, true);
+    petSettings.querySelectorAll(".ps-states button").forEach((x) =>
+      x.classList.toggle("on", x === b));
+  }));
