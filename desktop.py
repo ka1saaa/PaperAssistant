@@ -4,11 +4,20 @@
 WebView2 不可用时自动回退到系统浏览器。
 """
 import multiprocessing
+import os
 import socket
+import sys
 import threading
 import time
 
 multiprocessing.freeze_support()
+
+# 窗口模式（无控制台）下 stdout/stderr 为 None，任何库打印/配置彩色日志都会崩，
+# 统一垫上空流
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
 
 def _free_port() -> int:
@@ -26,8 +35,10 @@ def main() -> None:
     import uvicorn
     from app.main import app
 
+    # log_config=None：跳过 uvicorn 的彩色日志 dictConfig（窗口模式无 stdout 会崩）
     server = uvicorn.Server(
-        uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+        uvicorn.Config(app, host="127.0.0.1", port=port,
+                       log_level="warning", log_config=None)
     )
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
