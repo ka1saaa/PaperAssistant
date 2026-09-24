@@ -7,6 +7,7 @@
 
 (function () {
   const STATES = ["idle", "waving", "waiting", "running", "jumping", "failed"];
+  const EXT = ".webp";
   const POKE_WORDS = [
     "嘿嘿，戳我干嘛～", "小鱼在的！", "要一起读论文吗？",
     "右键我可以打开聊天哦！", "拖不动？我才不重！", "鲸鱼娘今天也在努力～",
@@ -91,7 +92,7 @@
       if (!STATES.includes(name)) return;
       if (this.state === name && !force) return;
       this.state = name;
-      this.img.src = `/static/img/pet/${name}.gif`;
+      this.img.src = `/static/img/pet/${name}${EXT}`;
       this.img.dataset.state = name;
       clearTimeout(this._idleTimer);
     }
