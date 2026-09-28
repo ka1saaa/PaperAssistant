@@ -89,8 +89,8 @@ async def summarize_paper(pdf_path: Path, title: str = "") -> dict:
         {"role": "user", "content": _SUMMARY_PROMPT.format(title=title or "未知", text=text)},
     ]
     last_err: Exception | None = None
-    for attempt in range(2):  # 推理模型偶发输出不规范，自动重试一次
-        raw = await chat(messages, temperature=0.2, max_tokens=4000)
+    for attempt in range(3):  # 推理模型偶发输出不规范/截断，自动重试
+        raw = await chat(messages, temperature=0.2, max_tokens=9000)
         try:
             data = _parse_json(raw)
             break

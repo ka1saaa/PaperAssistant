@@ -263,6 +263,10 @@ async def summarize_task(task_id: str) -> dict:
         summary = await summarizer.summarize_paper(pdf, task.title)
     except LLMError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 — fitz/文件等异常也要给出可诊断信息
+        logger.exception("summarize failed for %s", task_id)
+        raise HTTPException(status_code=500,
+                            detail=f"概括失败：{type(exc).__name__}: {exc}")
     sp = task.summary_path()
     sp.parent.mkdir(parents=True, exist_ok=True)
     sp.write_text(json.dumps(summary, ensure_ascii=False), encoding="utf-8")
