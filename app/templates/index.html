@@ -6,7 +6,7 @@
 <title>AutoTranslate · 论文自动翻译</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
-<link rel="stylesheet" href="/static/style.css?v=100">
+<link rel="stylesheet" href="/static/style.css?v=102">
 </head>
 <body>
 <div id="app-bg" aria-hidden="true">
@@ -490,10 +490,16 @@
   </div>
 </div>
 
+<script>
+  window.__jsError = null;
+  window.addEventListener('error', function(e) {
+    window.__jsError = (e.message || '') + ' @ line ' + e.lineno + ' in ' + (e.filename || '').split('/').pop();
+  });
+</script>
 <script src="/static/vendor/d3.min.js"></script>
 <script src="/static/vendor/pdf.min.js"></script>
 <script src="/static/vendor/marked.min.js"></script>
 <script src="/static/pet.js?v=10"></script>
-<script src="/static/app.js?v=100"></script>
+<script src="/static/app.js?v=101"></script>
 </body>
 </html>

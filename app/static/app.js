@@ -1696,13 +1696,9 @@ $("#pc-resetpos").addEventListener("click", () => {
   window.petAPI?.resetPos();
   toast("小鱼已回到默认位置", "ok");
 });
-$("#pc-hide").addEventListener("click", () => {
-  window.petAPI?.hide();
-  toast("小鱼已隐藏（在「翻译论文」右下角点 👁 唤回）", "info");
-});
 
 // 状态动画手动预览
-petViewStateBound = false;
+
 document.addEventListener("click", (e) => {
   const b = e.target.closest?.(".ps-states button");
   if (!b) return;

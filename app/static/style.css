@@ -863,7 +863,8 @@ body { background: var(--bg); }
 .ai-input-row .btn { padding: 9px 14px; }
 
 /* ===== 桌宠设置视图 ===== */
-.ps-check { display: flex !important; align-items: center; gap: 8px; font-size: 13.5px !important; color: var(--text) !important; margin: 10px 0 !important; }
+#view-personal label { display: block; font-size: 12.5px; color: var(--muted); margin: 20px 0 8px; line-height: 1.9; }
+#view-personal .ps-check { display: flex !important; align-items: center; gap: 8px; font-size: 13.5px !important; color: var(--text) !important; margin: 18px 0 !important; line-height: 1.9; }
 .ps-check input { width: 16px; height: 16px; accent-color: var(--primary); }
 .ps-states { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .ps-states button {
@@ -887,3 +888,7 @@ body { background: var(--bg); }
 .bg-mode.on span { color: var(--primary); font-weight: 600; }
 .bg-none { display: flex; align-items: center; justify-content: center; height: 74px; color: var(--muted); font-size: 20px; background: linear-gradient(135deg,#fdf6ec,#eef4ff); }
 
+
+/* 桌宠设置视图行距 */
+#view-pet label { display: block; font-size: 12.5px; color: var(--muted); margin: 20px 0 8px; line-height: 1.9; }
+#view-pet .ps-check { margin: 18px 0 !important; line-height: 1.9; }
