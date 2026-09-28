@@ -8,7 +8,7 @@ import httpx
 from .models import Paper
 
 API_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
-FIELDS = "title,abstract,year,authors,venue,externalIds,openAccessPdf"
+FIELDS = "title,abstract,year,authors,venue,externalIds,openAccessPdf,citationCount"
 
 
 async def search_semantic(query: str, limit: int = 10, timeout: float = 15.0) -> list[Paper] | None:
@@ -43,6 +43,7 @@ async def search_semantic(query: str, limit: int = 10, timeout: float = 15.0) ->
                 year=item.get("year"),
                 abstract=item.get("abstract") or "",
                 venue=item.get("venue") or "",
+                citation_count=item.get("citationCount") or 0,
                 pdf_url=oa.get("url"),
                 arxiv_id=ext.get("ArXiv"),
             )

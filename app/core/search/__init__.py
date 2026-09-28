@@ -11,6 +11,7 @@ import time
 from .arxiv import search_arxiv
 from .models import Paper
 from .semantic import search_semantic
+from .openalex import search_openalex
 
 from app.core.llm import chat
 
@@ -82,25 +83,40 @@ async def _do_search(query: str, limit: int, *, cjk: bool) -> list[Paper]:
     results = await asyncio.gather(
         search_arxiv(query, limit),
         search_semantic(query, limit),
+        search_openalex(query, limit),
         return_exceptions=True,
     )
     arxiv_papers = results[0] if isinstance(results[0], list) else []
     semantic_papers = results[1] if isinstance(results[1], list) else []
+    openalex_papers = results[2] if isinstance(results[2], list) else []
 
-    # S2 被限流且 arXiv 无结果时，稍候重试一次 S2
-    if results[1] is None and not arxiv_papers:
+    # S2 被限流且其他源无结果时，稍候重试一次 S2
+    if results[1] is None and not arxiv_papers and not openalex_papers:
         await asyncio.sleep(1.5)
         semantic_papers = await search_semantic(query, limit) or []
 
     by_title: dict[str, Paper] = {_norm_title(p.title): p for p in arxiv_papers}
     merged: list[Paper] = list(arxiv_papers)
-    for sp in semantic_papers:
-        key = _norm_title(sp.title)
-        if key in by_title:
-            _merge(by_title[key], sp)
-        else:
-            by_title[key] = sp
-            merged.append(sp)
+    for more in (semantic_papers, openalex_papers):
+        for sp in more:
+            key = _norm_title(sp.title)
+            if key in by_title:
+                _merge(by_title[key], sp)
+            else:
+                by_title[key] = sp
+                merged.append(sp)
+
+    # 标题精确/前缀命中置顶（完整标题搜索的关键），其余有 PDF 的靠前
+    qkey = _norm_title(query)
+
+    def _rank(p: Paper):
+        tkey = _norm_title(p.title)
+        equal = bool(qkey) and tkey == qkey
+        prefix = bool(qkey) and tkey.startswith(qkey)
+        return (0 if equal else 1 if prefix else 2,
+                -(p.citation_count or 0), p.download_url is None)
+
+    merged.sort(key=_rank)
     return merged
 
 
@@ -120,7 +136,7 @@ async def search_papers(query: str, limit: int = 10) -> list[Paper]:
         effective_query = await _translate_query(query) or query
 
     merged = await _do_search(effective_query, limit, cjk=_has_cjk(effective_query))
-    merged.sort(key=lambda p: p.download_url is None)
+    # 排序已在 _do_search 内完成（标题精确 > 前缀 > 高被引 > 有 PDF），不再二次排序
 
     # 只缓存非空结果，避免限流/网络抖动导致的空结果被钉住
     if merged:

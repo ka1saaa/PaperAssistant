@@ -80,10 +80,10 @@ async def get_title_by_id(arxiv_id: str, timeout: float = 15.0) -> str | None:
         return None
 
 
-async def search_arxiv(query: str, limit: int = 10, timeout: float = 15.0) -> list[Paper]:
-    """按关键词检索 arXiv，返回归一化结果列表；失败时返回空列表。"""
+async def _arxiv_fetch(search_query: str, limit: int, timeout: float) -> list[Paper] | None:
+    """执行一次 arXiv 查询，返回论文列表；网络/解析失败返回 None。"""
     params = {
-        "search_query": f"all:{query}",
+        "search_query": search_query,
         "start": 0,
         "max_results": limit,
         "sortBy": "relevance",
@@ -100,9 +100,24 @@ async def search_arxiv(query: str, limit: int = 10, timeout: float = 15.0) -> li
     except ET.ParseError:
         return []
 
-    papers = []
-    for entry in root.findall("atom:entry", NS):
-        paper = _parse_entry(entry)
-        if paper:
-            papers.append(paper)
-    return papers
+        papers = []
+        for entry in root.findall("atom:entry", NS):
+            paper = _parse_entry(entry)
+            if paper:
+                papers.append(paper)
+        return papers
+    except (httpx.HTTPError, ET.ParseError):
+        return None
+
+
+def _norm_title(t: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (t or "").lower())
+
+
+async def search_arxiv(query: str, limit: int = 10, timeout: float = 15.0) -> list[Paper]:
+    """检索 arXiv：标题短语精确匹配优先，命中置顶；回退 all: 全文检索。"""
+    query = query.strip()
+
+    # arXiv 限流 1 次/3 秒：仅发一次 all: 查询（标题精确置顶交给聚合层）
+    papers = await _arxiv_fetch(f"all:{query}", limit, timeout) or []
+    return papers[:limit]

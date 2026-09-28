@@ -11,6 +11,7 @@ class Paper(BaseModel):
     year: int | None = None
     abstract: str = ""
     venue: str = ""
+    citation_count: int = 0
     pdf_url: str | None = None               # 开放获取的 PDF 直链
     arxiv_id: str | None = None              # 命中 arXiv 时记录，可直接构造 PDF 链接
 
