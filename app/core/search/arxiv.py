@@ -1,7 +1,9 @@
 """arXiv API 检索源（免费，无需 Key）。
 
 接口文档: https://info.arxiv.org/help/api/user-manual.html
+限流策略：arXiv 要求请求间隔 3 秒，429/503 自动退避重试。
 """
+import asyncio
 import re
 import xml.etree.ElementTree as ET
 
@@ -81,33 +83,39 @@ async def get_title_by_id(arxiv_id: str, timeout: float = 15.0) -> str | None:
 
 
 async def _arxiv_fetch(search_query: str, limit: int, timeout: float) -> list[Paper] | None:
-    """执行一次 arXiv 查询，返回论文列表；网络/解析失败返回 None。"""
+    """执行一次 arXiv 查询；429/503 退避重试；最终失败返回 None。"""
     params = {
         "search_query": search_query,
         "start": 0,
         "max_results": limit,
         "sortBy": "relevance",
     }
-    try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            resp = await client.get(API_URL, params=params)
+    for wait in (0, 3.5, 7.0):          # arXiv 要求 3 秒间隔，退避重试两轮
+        if wait:
+            await asyncio.sleep(wait)
+        try:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                resp = await client.get(API_URL, params=params)
+            if resp.status_code in (429, 503):
+                continue
             resp.raise_for_status()
-    except httpx.HTTPError:
-        return []
-
+            break
+        except httpx.HTTPError:
+            if wait:
+                return None
+            continue
+    else:
+        return None
     try:
         root = ET.fromstring(resp.text)
     except ET.ParseError:
-        return []
-
-        papers = []
-        for entry in root.findall("atom:entry", NS):
-            paper = _parse_entry(entry)
-            if paper:
-                papers.append(paper)
-        return papers
-    except (httpx.HTTPError, ET.ParseError):
         return None
+    papers = []
+    for entry in root.findall("atom:entry", NS):
+        paper = _parse_entry(entry)
+        if paper:
+            papers.append(paper)
+    return papers
 
 
 def _norm_title(t: str) -> str:
@@ -115,7 +123,7 @@ def _norm_title(t: str) -> str:
 
 
 async def search_arxiv(query: str, limit: int = 10, timeout: float = 15.0) -> list[Paper]:
-    """检索 arXiv：标题短语精确匹配优先，命中置顶；回退 all: 全文检索。"""
+    """检索 arXiv：单次 all: 查询（限流由 _arxiv_fetch 内部退避处理）。"""
     query = query.strip()
 
     # arXiv 限流 1 次/3 秒：仅发一次 all: 查询（标题精确置顶交给聚合层）
